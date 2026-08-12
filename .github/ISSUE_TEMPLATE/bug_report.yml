@@ -13,7 +13,7 @@ body:
     id: version
     attributes:
       label: Package Version
-      description: Run `pnpm list typed-event-bus` or check package.json
+      description: Run `pnpm list @youzi9601/typed-event-bus` or check package.json
       placeholder: "0.1.0"
     validations:
       required: true
@@ -48,7 +48,7 @@ body:
       description: Provide a runnable minimal code snippet, or a GitHub repo link
       render: typescript
       placeholder: |
-        import { defineEvent, defineEvents, createEventBus } from 'typed-event-bus'
+        import { defineEvent, defineEvents, createEventBus } from '@youzi9601/typed-event-bus'
 
         const userEvents = defineEvents("user", {
           created: defineEvent("created").payload<{ id: string }>(),

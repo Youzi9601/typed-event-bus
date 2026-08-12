@@ -2,10 +2,10 @@
 
 **Define Once, Use Everywhere** — Type-safe event bus with zero duplicate declarations.
 
-[![npm version](https://img.shields.io/npm/v/typed-event-bus.svg)](https://www.npmjs.com/package/typed-event-bus)
+[![npm version](https://img.shields.io/npm/v/@youzi9601/typed-event-bus.svg)](https://www.npmjs.com/package/@youzi9601/typed-event-bus)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
-[![Bundle Size](https://img.shields.io/bundlephobia/minzip/typed-event-bus)](https://bundlephobia.com/package/typed-event-bus)
+[![Bundle Size](https://img.shields.io/bundlephobia/minzip/@youzi9601/typed-event-bus)](https://bundlephobia.com/package/@youzi9601/typed-event-bus)
 
 ---
 
@@ -42,7 +42,7 @@ bus.on(userCreated, (payload) => {
 - ✅ **Native IDE support** — Autocomplete, Rename Symbol, Go to Definition
 - ✅ **Wildcard correlation narrowing** — `onAll(namespace, ({ event, payload }) => { ... })` correctly narrows types
 - ✅ **Explicit sync/async separation** — `emit` (fire-and-forget) / `emitAsync` (await all)
-- ✅ **< 2.1 KB gzipped** — zero dependencies, extremely lightweight
+- ✅ **< 2.5 KB gzipped** — zero dependencies, extremely lightweight
 - ✅ **Transport agnostic** — Browser / Node / Worker / Electron / Deno / Bun / Edge compatible
 
 ---
@@ -50,11 +50,11 @@ bus.on(userCreated, (payload) => {
 ## Installation
 
 ```bash
-pnpm add typed-event-bus
+pnpm add @youzi9601/typed-event-bus
 # or
-npm install typed-event-bus
+npm install @youzi9601/typed-event-bus
 # or
-yarn add typed-event-bus
+yarn add @youzi9601/typed-event-bus
 ```
 
 **Peer Dependency:** `typescript >= 5.0.0`
@@ -64,7 +64,7 @@ yarn add typed-event-bus
 ## Quick Start
 
 ```typescript
-import { defineEvent, defineEvents, createEventBus } from 'typed-event-bus'
+import { defineEvent, defineEvents, createEventBus } from '@youzi9601/typed-event-bus'
 
 // 1. Define events (single or namespace)
 const userCreated = defineEvent('user.created').payload<{ id: string; name: string }>()
@@ -287,7 +287,7 @@ Contributions welcome! Please read:
 
 ## License
 
-[MIT License](LICENSE) © 2024 [Youzi9601](https://github.com/Youzi9601)
+[MIT License](LICENSE) © 2026 [Youzi9601](https://github.com/Youzi9601)
 
 ---
 

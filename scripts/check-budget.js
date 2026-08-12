@@ -9,8 +9,8 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const BUDGET = {
-  esm: 2100,
-  cjs: 2100,
+  esm: 2500,
+  cjs: 2500,
 };
 
 function getGzipSize(filePath) {

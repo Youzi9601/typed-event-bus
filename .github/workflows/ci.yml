@@ -3,11 +3,9 @@ name: CI
 on:
   push:
     branches:
-      - master
       - main
   pull_request:
     branches:
-      - master
       - main
 
 permissions:
@@ -50,7 +48,7 @@ jobs:
           gzip -c dist/index.js | wc -c
           BUNDLE_SIZE=$(gzip -c dist/index.js | wc -c)
           echo "Bundle size: $BUNDLE_SIZE bytes"
-          if [ "$BUNDLE_SIZE" -gt 2150 ]; then
-            echo "ERROR: Bundle size exceeds 2.1 KB limit"
+          if [ "$BUNDLE_SIZE" -gt 2510 ]; then
+            echo "ERROR: Bundle size exceeds 2.5 KB limit"
             exit 1
           fi

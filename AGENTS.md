@@ -97,7 +97,7 @@ pnpm release     # build + publish
 1. **所有變更需對應 Issue**（Bug/Feature/Question 模板）
 2. **破壞性變更需 ADR 記錄**（在 PR 中說明決策理由）
 3. **型別變更需同步更新 type tests**
-4. **Bundle size 不得超標**（< 2.1 KB gzipped，CI 閘門，見 ADR-13）
+4. **Bundle size 不得超標**（< 2.5 KB gzipped，CI 閘門，見 ADR-13）
 
 ---
 
@@ -160,7 +160,7 @@ Format:
 - [ ] `pnpm test:types` 100% 通過
 - [ ] `pnpm test` 覆蓋率 > 95%
 - [ ] `pnpm build` 成功
-- [ ] `gzip-size dist/index.js` < 2100 bytes (ADR-13)
+- [ ] `gzip-size dist/index.js` < 2500 bytes (ADR-13)
 - [ ] 無 `console.log` / `debugger` 殘留
 - [ ] Commit 符合 Conventional Commits
 

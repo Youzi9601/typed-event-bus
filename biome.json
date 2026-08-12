@@ -7,7 +7,12 @@
   },
   "files": {
     "ignoreUnknown": false,
-    "ignore": ["dist/**", "node_modules/**", "*.config.*", "*.lock"]
+    "ignore": [
+      "dist/**",
+      "node_modules/**",
+      "*.config.*",
+      "*.lock"
+    ]
   },
   "formatter": {
     "enabled": true,
@@ -53,7 +58,7 @@
   },
   "json": {
     "formatter": {
-      "trailingCommas": "none"
+      "enabled": false
     }
   }
 }

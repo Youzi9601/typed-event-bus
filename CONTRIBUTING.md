@@ -101,7 +101,7 @@ Branch naming convention:
 **Core principles:**
 - **Types first**: Write type tests first (`tests/types/*.test-d.ts`), then implement runtime
 - **Zero dependencies**: Core package `dependencies` must remain empty
-- **Bundle size**: After every change verify `pnpm build && gzip-size dist/index.js` < 2.1 KB (ADR-13)
+- **Bundle size**: After every change verify `pnpm build && gzip-size dist/index.js` < 2.5 KB (ADR-13)
 
 **Required checks:**
 ```bash
