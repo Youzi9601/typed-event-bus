@@ -1,0 +1,38 @@
+---
+name: Question
+description: Ask a question about usage or API
+title: "[Question] "
+labels: ["question"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Welcome! Please check the following first:
+        - [ ] Read the [README](https://github.com/Youzi9601/typed-event-bus#readme)
+        - [ ] Search [existing Issues](https://github.com/Youzi9601/typed-event-bus/issues)
+        - [ ] Review the [API Documentation](https://github.com/Youzi9601/typed-event-bus/tree/main/docs)
+  - type: textarea
+    id: question
+    attributes:
+      label: Your Question
+      description: Describe your question, use case, and any confusion
+      placeholder: |
+        How to share event definitions between Electron Main Process and Renderer Process?
+        Tried ipcMain/ipcRenderer but types don't work...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Package Version
+      placeholder: "0.1.0"
+    validations:
+      required: false
+  - type: input
+    id: runtime
+    attributes:
+      label: Runtime Environment
+      placeholder: "Electron 30 / Node.js 22"
+    validations:
+      required: false

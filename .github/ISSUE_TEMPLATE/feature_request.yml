@@ -1,0 +1,58 @@
+---
+name: Feature Request
+description: Suggest a new feature or improvement
+title: "[Feature] "
+labels: ["feature", "triage"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the suggestion! Please fill in the following information to help us evaluate.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the pain point, limitation of existing API, or use case gap
+      placeholder: |
+        Currently there's no way to automatically attach metadata (e.g. timestamp, correlationId) on emit,
+        requiring manual addition in every listener, which is error-prone and inconsistent.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed Solution
+      description: Specific API design, expected behavior, type signature sketch
+      placeholder: |
+        Add `meta?: boolean` option to `defineEvent`. When enabled, automatically inject `_meta: { timestamp: number, correlationId: string }` into payload.
+        Or provide `bus.useMeta()` middleware to handle it automatically.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Other approaches you've considered, or existing workarounds
+      placeholder: |
+        Current workaround is a wrapper function around emit, but it loses type inference benefits.
+    validations:
+      required: false
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Related issues, PRs, discussion links, screenshots, etc.
+      placeholder: |
+        Reference discussion in #123...
+    validations:
+      required: false
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I have searched existing Issues/PRs and confirmed this is not a duplicate
+          required: true
+        - label: This feature aligns with typed-event-bus core philosophy (Define Once, Use Everywhere)
+          required: true

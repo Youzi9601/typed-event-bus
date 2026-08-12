@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+
+# Source files
+src/
+tests/
+bench/
+scripts/
+
+# Config files (keep only package.json, README, LICENSE, CHANGELOG)
+tsconfig.json
+tsup.config.ts
+vitest.config.ts
+biome.json
+.gitignore
+.github/
+.vscode/
+.idea/
+
+# IDE
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Type checking cache
+.tsbuildinfo
+
+# Turbo
+.turbo/
+
+# Changesets
+.changeset/
