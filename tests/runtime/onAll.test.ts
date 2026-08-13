@@ -74,6 +74,35 @@ describe('onAll', () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
+  it('marks subscription as unsubscribed when signal aborts', () => {
+    const handler = vi.fn();
+    const controller = new AbortController();
+    const sub = bus.onAll(userEvents, handler, { signal: controller.signal });
+
+    controller.abort();
+
+    expect(sub.unsubscribed).toBe(true);
+  });
+
+  it('works with an empty namespace', () => {
+    const emptyEvents = defineEvents('empty', {});
+    const handler = vi.fn();
+    const sub = bus.onAll(emptyEvents, handler);
+
+    sub.unsubscribe();
+
+    expect(sub.unsubscribed).toBe(true);
+  });
+
+  it('exposes the provided signal even with an empty namespace', () => {
+    const emptyEvents = defineEvents('empty', {});
+    const handler = vi.fn();
+    const controller = new AbortController();
+    const sub = bus.onAll(emptyEvents, handler, { signal: controller.signal });
+
+    expect(sub.signal).toBe(controller.signal);
+  });
+
   it('works with async handler', async () => {
     const handler = vi.fn(async (_e: { event: string; payload: unknown }) => {
       await new Promise(r => setTimeout(r, 10));

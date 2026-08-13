@@ -1,6 +1,6 @@
 {
   "name": "@youzi9601/typed-event-bus",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Define Once, Use Everywhere — Type-safe event bus with zero duplicate declarations",
   "private": false,
   "type": "module",
@@ -31,7 +31,10 @@
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
-    "check": "pnpm lint && pnpm test",
+    "check": "pnpm lint && pnpm exec tsc --noEmit && pnpm test:types && pnpm test && pnpm build && node scripts/check-budget.js",
+    "changeset": "changeset",
+    "version": "changeset version",
+    "release": "pnpm build && changeset publish",
     "prepublishOnly": "pnpm check && pnpm build"
   },
   "keywords": [

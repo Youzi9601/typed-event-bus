@@ -1,11 +1,16 @@
-import { createBusContext } from './bus/context.js';
+import { createBusContext, type NormalizedRegistry } from './bus/context.js';
 import { emit } from './bus/emit.js';
 import { emitAsync } from './bus/emit-async.js';
 import { off } from './bus/off.js';
-import { on as onImpl } from './bus/on.js';
+import {
+  on as onImpl,
+  prependListener as prependListenerImpl,
+  prependOnceListener as prependOnceListenerImpl,
+} from './bus/on.js';
 import { onAll as onAllImpl } from './bus/on-all.js';
 import { once as onceImpl } from './bus/once.js';
-import { eventNames, listenerCount, removeAllListeners, use } from './bus/utils.js';
+import { eventNames, listenerCount, rawListeners, removeAllListeners, use } from './bus/utils.js';
+import { BRAND_KEY, PREFIX_KEY } from './constants.js';
 import type {
   BusOptions,
   EventDefinition,
@@ -45,14 +50,14 @@ export function createEventBus<TRegistry extends EventRegistry = EventRegistry>(
   registry:
     | EventRegistry
     | EventDefinition<string, unknown>
-    | ({ readonly __prefix: string } & Record<string, unknown>)
-    | Record<string, { readonly __prefix: string } & Record<string, unknown>>,
+    | ({ readonly [PREFIX_KEY]: string } & Record<string, unknown>)
+    | Record<string, { readonly [PREFIX_KEY]: string } & Record<string, unknown>>,
   options?: BusOptions<TRegistry>
 ) {
   let normalizedRegistry: EventRegistry;
 
-  const hasPrefix = Object.hasOwn(registry, '__prefix');
-  const hasBrand = Object.hasOwn(registry, '__brand');
+  const hasPrefix = Object.hasOwn(registry, PREFIX_KEY);
+  const hasBrand = Object.hasOwn(registry, BRAND_KEY);
 
   if (hasPrefix) {
     normalizedRegistry = { default: registry } as EventRegistry;
@@ -60,7 +65,7 @@ export function createEventBus<TRegistry extends EventRegistry = EventRegistry>(
     const def = registry as EventDefinition<string, unknown>;
     normalizedRegistry = {
       default: {
-        __prefix: 'default',
+        [PREFIX_KEY]: 'default',
         [def.name.split('.').pop() || 'event']: def,
       },
     } as EventRegistry;
@@ -68,10 +73,6 @@ export function createEventBus<TRegistry extends EventRegistry = EventRegistry>(
     normalizedRegistry = registry as EventRegistry;
   }
 
-  type NormalizedRegistry = Record<
-    string,
-    { readonly __prefix: string } & Record<string, EventDefinition<string, unknown> | string>
-  >;
   const ctx = createBusContext(normalizedRegistry as NormalizedRegistry, options);
 
   const bus = {
@@ -82,7 +83,7 @@ export function createEventBus<TRegistry extends EventRegistry = EventRegistry>(
      * @typeParam TEvent - EventDefinition type, payload inferred automatically
      * @param event - EventDefinition object created by defineEvent or defineEvents
      * @param payload - Event payload, type strictly checked against EventDefinition
-     * @returns `true` if at least one listener was called, `false` if no listeners registered
+     * @returns `true` if listeners were registered for the event, `false` otherwise
      *
      * @example
      * const userCreated = defineEvent("user.created").payload<{ id: string; name: string }>()
@@ -103,7 +104,7 @@ export function createEventBus<TRegistry extends EventRegistry = EventRegistry>(
      * @param event - EventDefinition object created by defineEvent or defineEvents
      * @param payload - Event payload, type strictly checked against EventDefinition
      * @returns Promise that resolves when all listeners complete
-     * @throws {MultiError} When any listener throws, containing all collected errors
+     * @throws {MultiError} When any listener or middleware throws, containing all collected errors
      *
      * @example
      * await bus.emitAsync(userCreated, { id: "123", name: "Alice" })
@@ -165,6 +166,37 @@ export function createEventBus<TRegistry extends EventRegistry = EventRegistry>(
     ): Subscription => onceImpl(ctx, bus, event, listener, options),
 
     /**
+     * Subscribe at the front of the listener order (Node's prependListener).
+     *
+     * @typeParam TEvent - EventDefinition type, payload inferred automatically
+     * @param event - EventDefinition object created by defineEvent or defineEvents
+     * @param listener - Handler function, payload type auto-inferred from EventDefinition
+     * @param options - Optional: { signal?: AbortSignal } for external cancellation
+     * @returns Subscription object
+     */
+    prependListener: <TEvent extends EventDefinition<string, unknown>>(
+      event: TEvent,
+      listener: Listener<EventPayload<TEvent>>,
+      options?: { signal?: AbortSignal }
+    ): Subscription => prependListenerImpl(ctx, bus, event, listener, options),
+
+    /**
+     * Subscribe at the front of the listener order, executed only once
+     * (Node's prependOnceListener).
+     *
+     * @typeParam TEvent - EventDefinition type, payload inferred automatically
+     * @param event - EventDefinition object created by defineEvent or defineEvents
+     * @param listener - Handler function, payload type auto-inferred from EventDefinition
+     * @param options - Optional: { signal?: AbortSignal } for external cancellation
+     * @returns Subscription object
+     */
+    prependOnceListener: <TEvent extends EventDefinition<string, unknown>>(
+      event: TEvent,
+      listener: Listener<EventPayload<TEvent>>,
+      options?: { signal?: AbortSignal }
+    ): Subscription => prependOnceListenerImpl(ctx, bus, event, listener, options),
+
+    /**
      * Subscribe to all events in a namespace with correlation narrowing.
      * Handler receives discriminated object { event, payload } enabling TypeScript
      * to narrow payload type based on event name.
@@ -191,7 +223,7 @@ export function createEventBus<TRegistry extends EventRegistry = EventRegistry>(
      *   }
      * })
      */
-    onAll: <TNamespace extends { readonly __prefix: string }>(
+    onAll: <TNamespace extends { readonly [PREFIX_KEY]: string }>(
       namespace: TNamespace,
       handler: WildcardHandler<EventsOf<TNamespace>>,
       options?: { signal?: AbortSignal }
@@ -244,6 +276,18 @@ export function createEventBus<TRegistry extends EventRegistry = EventRegistry>(
     listenerCount: (event: EventDefinition<string, unknown>): number => listenerCount(ctx, event),
 
     /**
+     * Get all registered listeners for an event, in registration order.
+     *
+     * Unlike Node's rawListeners, once listeners are returned as the original
+     * listener function — Node wraps once listeners in an internal wrapper.
+     *
+     * @param event - EventDefinition object
+     * @returns Array of listener functions
+     */
+    rawListeners: (event: EventDefinition<string, unknown>): Listener<unknown>[] =>
+      rawListeners(ctx, event),
+
+    /**
      * Get all registered event names.
      *
      * @returns Array of event name strings
@@ -290,41 +334,3 @@ export function createEventBus<TRegistry extends EventRegistry = EventRegistry>(
 export type EventBus<TRegistry extends EventRegistry = EventRegistry> = ReturnType<
   typeof createEventBus<TRegistry>
 >;
-
-export {
-  defineEvent,
-  defineEvents,
-  isEventDefinition,
-  isEventNamespace,
-  type NameOf,
-  type PayloadOf,
-} from './define.js';
-export {
-  defaultErrorHandler,
-  executeAsyncListenerSafely,
-  executeListenerSafely,
-  MultiError,
-} from './errors.js';
-export {
-  createLoggingMiddleware,
-  createMetricsMiddleware,
-  createTimingMiddleware,
-  executeMiddleware,
-} from './middleware.js';
-export { createSubscription, EventSubscription } from './subscription.js';
-export type {
-  AllEventNamesOf,
-  AllEventsOf,
-  BusOptions,
-  ErrorHandler,
-  EventDefinition,
-  EventName,
-  EventNamespace,
-  EventPayload,
-  EventRegistry,
-  EventsOf,
-  Listener,
-  Middleware,
-  Subscription,
-  WildcardHandler,
-} from './types.js';

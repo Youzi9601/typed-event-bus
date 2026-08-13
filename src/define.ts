@@ -1,7 +1,27 @@
-import type { EventDefinition, EventNamespace } from './types.js';
+import { BRAND_KEY, PREFIX_KEY } from './constants.js';
+import type { EventDefinition } from './types.js';
 
 const EVENT_DEFINITION_BRAND = Symbol('EventDefinition');
 const EVENT_NAMESPACE_BRAND = Symbol('EventNamespace');
+
+/** Define a non-enumerable, read-only property (metadata / phantom brand) */
+function markNonEnumerable<T extends object>(obj: T, key: PropertyKey, value: unknown): T {
+  Object.defineProperty(obj, key, {
+    value,
+    writable: false,
+    enumerable: false,
+    configurable: false,
+  });
+  return obj;
+}
+
+function markBrand<T extends object>(obj: T, brand: symbol): T {
+  return markNonEnumerable(obj, BRAND_KEY, brand);
+}
+
+function markPrefix<T extends object>(obj: T, prefix: string): T {
+  return markNonEnumerable(obj, PREFIX_KEY, prefix);
+}
 
 /**
  * Builder returned by defineEvent().
@@ -34,25 +54,12 @@ export interface EventDefinitionBuilder<TName extends string>
 export function defineEvent<const TName extends string>(
   name: TName
 ): EventDefinitionBuilder<TName> {
-  const def = { name } as EventDefinition<TName, unknown>;
-  Object.defineProperty(def, '__brand', {
-    value: EVENT_DEFINITION_BRAND,
-    writable: false,
-    enumerable: false,
-    configurable: false,
-  });
+  const def = createEventDefinition(name) as EventDefinition<TName, unknown>;
 
   const builder = def as unknown as EventDefinitionBuilder<TName>;
   Object.defineProperty(builder, 'payload', {
     value: <TPayload>(): EventDefinition<TName, TPayload> => {
-      const defWithPayload = { name } as EventDefinition<TName, TPayload>;
-      Object.defineProperty(defWithPayload, '__brand', {
-        value: EVENT_DEFINITION_BRAND,
-        writable: false,
-        enumerable: false,
-        configurable: false,
-      });
-      return defWithPayload;
+      return createEventDefinition(name) as EventDefinition<TName, TPayload>;
     },
     writable: false,
     enumerable: false,
@@ -63,54 +70,61 @@ export function defineEvent<const TName extends string>(
 }
 
 /**
- * Namespace definition input type.
- * Accepts EventDefinitionBuilder (from defineEvent), EventDefinition,
- * or nested DefineEventsOutput (for nested namespaces).
- * __prefix is added internally — not needed in input.
- */
-export type DefineEventsInput<
-  _TPrefix extends string,
-  TDefs extends Record<
-    string,
-    | EventDefinition<string, unknown>
-    | DefineEventsOutput<string, Record<string, EventDefinition<string, unknown>>>
-  >,
-> = {
-  [K in keyof TDefs]: K extends '__prefix' ? never : TDefs[K];
-};
-
-/**
  * Namespace output type.
  * All event names are prefixed: `${TPrefix}.${K}`
- * Nested namespaces preserve their structure with updated prefixes.
+ * Nested namespaces recurse with an updated prefix, supporting arbitrary depth
+ * and mixed nodes (events and namespaces at the same level).
  *
  * `__prefix` is runtime metadata (used by isEventNamespace and tests).
  * `__brand` is a phantom symbol (compile-time only, non-enumerable at runtime).
  */
-export type DefineEventsOutput<
-  TPrefix extends string,
-  TDefs extends Record<
-    string,
-    | EventDefinition<string, unknown>
-    | DefineEventsOutput<string, Record<string, EventDefinition<string, unknown>>>
-  >,
-> = {
-  readonly __prefix: TPrefix;
+export type DefineEventsOutput<TPrefix extends string, TDefs extends Record<string, unknown>> = {
+  readonly [PREFIX_KEY]: TPrefix;
 } & {
-  readonly [K in keyof TDefs as Exclude<K, '__prefix'>]: TDefs[K] extends EventDefinition<
-    string,
-    infer P
-  >
+  readonly [K in keyof TDefs as K extends typeof PREFIX_KEY | typeof BRAND_KEY
+    ? never
+    : K]: TDefs[K] extends EventDefinition<string, infer P>
     ? EventDefinition<`${TPrefix}.${K & string}`, P>
-    : TDefs[K] extends DefineEventsOutput<string, infer TNested>
-      ? DefineEventsOutput<`${TPrefix}.${K & string}`, TNested>
-      : never;
+    : TDefs[K] extends DefineEventsOutput<infer _N extends string, infer TN>
+      ? DefineEventsOutput<`${TPrefix}.${K & string}`, TN>
+      : TDefs[K];
 };
+
+function createEventDefinition(name: string): EventDefinition<string, unknown> {
+  return markBrand({ name } as EventDefinition<string, unknown>, EVENT_DEFINITION_BRAND);
+}
+
+/**
+ * Build a namespace: prefix every key's event name, recursing into nested
+ * namespaces and re-prefixing already-defined events. Shared by defineEvents
+ * (fresh definitions) and re-prefixing (embedding an existing namespace).
+ */
+function buildNamespace(prefix: string, source: Record<string, unknown>): Record<string, unknown> {
+  const result = markPrefix({} as Record<string, unknown>, prefix);
+
+  for (const key of Object.keys(source)) {
+    if (key === PREFIX_KEY || key === BRAND_KEY) continue;
+
+    const value = source[key];
+
+    if (isEventNamespace(value)) {
+      result[key] = buildNamespace(`${prefix}.${key}`, value as Record<string, unknown>);
+    } else if (isEventDefinition(value)) {
+      result[key] = createEventDefinition(`${prefix}.${key}`);
+    } else {
+      result[key] = value;
+    }
+  }
+
+  return markBrand(result, EVENT_NAMESPACE_BRAND);
+}
 
 /**
  * Create an event namespace.
  * Auto-composes prefix: defineEvents("user", { created: ... }) → "user.created"
- * Supports nested namespaces: defineEvents("user", { profile: defineEvents("profile", {...}) }) → "user.profile.*"
+ * Supports nested namespaces at arbitrary depth:
+ *   defineEvents("user", { profile: defineEvents("profile", {...}) }) → "user.profile.*"
+ * Mixed nodes (events and namespaces at the same level) are supported.
  *
  * @param prefix - Namespace prefix (e.g. "user", "order")
  * @param definitions - Event definition map, keys are relative names. Can include nested defineEvents calls.
@@ -137,107 +151,12 @@ export type DefineEventsOutput<
  */
 export function defineEvents<
   const TPrefix extends string,
-  const TDefs extends Record<
-    string,
-    | EventDefinition<string, unknown>
-    | DefineEventsOutput<string, Record<string, EventDefinition<string, unknown>>>
-  >,
+  const TDefs extends Record<string, unknown>,
 >(prefix: TPrefix, definitions: TDefs): DefineEventsOutput<TPrefix, TDefs> {
-  const result = {} as DefineEventsOutput<TPrefix, TDefs>;
-
-  Object.defineProperty(result, '__prefix', {
-    value: prefix,
-    writable: false,
-    enumerable: false,
-    configurable: false,
-  });
-
-  for (const key of Object.keys(definitions)) {
-    if (key === '__prefix') continue;
-
-    const value = (definitions as Record<string, unknown>)[key];
-
-    // Check if it's a nested namespace (has __prefix and __brand)
-    const isNestedNamespace =
-      typeof value === 'object' && value !== null && '__prefix' in value && '__brand' in value;
-
-    if (isNestedNamespace) {
-      // It's a nested namespace, need to update its prefix
-      const nestedNs = value as DefineEventsOutput<
-        string,
-        Record<string, EventDefinition<string, unknown>>
-      >;
-      const newPrefix = `${prefix}.${key}`;
-
-      // Create a new namespace object with updated prefix
-      const updatedNested = {} as DefineEventsOutput<
-        string,
-        Record<string, EventDefinition<string, unknown>>
-      >;
-
-      Object.defineProperty(updatedNested, '__prefix', {
-        value: newPrefix,
-        writable: false,
-        enumerable: false,
-        configurable: false,
-      });
-
-      // Copy all event definitions from nested namespace, updating their names
-      for (const nestedKey of Object.keys(nestedNs)) {
-        if (nestedKey === '__prefix' || nestedKey === '__brand') continue;
-
-        const nestedValue = (nestedNs as Record<string, unknown>)[nestedKey];
-
-        // Check if it's an EventDefinition
-        if (
-          typeof nestedValue === 'object' &&
-          nestedValue !== null &&
-          'name' in nestedValue &&
-          '__brand' in nestedValue
-        ) {
-          const newName = `${newPrefix}.${nestedKey}`;
-          const prefixedDef = { name: newName } as EventDefinition<string, unknown>;
-          Object.defineProperty(prefixedDef, '__brand', {
-            value: EVENT_DEFINITION_BRAND,
-            writable: false,
-            enumerable: false,
-            configurable: false,
-          });
-          (updatedNested as Record<string, unknown>)[nestedKey] = prefixedDef;
-        }
-        // If it's another nested namespace, recurse (but we don't expect more than 2 levels in current type system)
-      }
-
-      Object.defineProperty(updatedNested, '__brand', {
-        value: EVENT_NAMESPACE_BRAND,
-        writable: false,
-        enumerable: false,
-        configurable: false,
-      });
-
-      (result as Record<string, unknown>)[key] = updatedNested;
-    } else {
-      // Regular EventDefinition
-      const fullName = `${prefix}.${key}`;
-      const prefixedDef = { name: fullName } as EventDefinition<string, unknown>;
-      Object.defineProperty(prefixedDef, '__brand', {
-        value: EVENT_DEFINITION_BRAND,
-        writable: false,
-        enumerable: false,
-        configurable: false,
-      });
-      (result as Record<string, unknown>)[key] = prefixedDef;
-    }
-  }
-
-  Object.defineProperty(result, '__brand', {
-    value: EVENT_NAMESPACE_BRAND,
-    writable: false,
-    enumerable: false,
-    configurable: false,
-  });
-
-  return result;
+  return buildNamespace(prefix, definitions as Record<string, unknown>) as DefineEventsOutput<
+    TPrefix,
+    TDefs
+  >;
 }
 
 /**
@@ -252,34 +171,30 @@ export function isEventDefinition(value: unknown): value is EventDefinition<stri
     value !== null &&
     'name' in value &&
     typeof (value as Record<string, unknown>).name === 'string' &&
-    '__brand' in value
+    BRAND_KEY in value
   );
 }
 
 /**
  * Check if value is an EventNamespace.
  *
+ * The runtime check only verifies the namespace brand (a string `__prefix` and
+ * the namespace symbol), so the type predicate narrows to that shape rather
+ * than claiming every property is an EventDefinition — properties may be
+ * EventDefinitions, nested namespaces, or plain values, and must be checked
+ * individually.
+ *
  * @param value - Value to check
  * @returns `true` if value is an EventNamespace (has __prefix string and __brand symbol)
  */
 export function isEventNamespace(
   value: unknown
-): value is EventNamespace<string, Record<string, EventDefinition<string, unknown>>> {
+): value is { readonly [PREFIX_KEY]: string } & Record<string, unknown> {
   return (
     typeof value === 'object' &&
     value !== null &&
-    '__prefix' in value &&
-    typeof (value as Record<string, unknown>).__prefix === 'string' &&
-    '__brand' in value
+    PREFIX_KEY in value &&
+    typeof (value as Record<string, unknown>)[PREFIX_KEY] === 'string' &&
+    BRAND_KEY in value
   );
 }
-
-/**
- * Extract payload type from EventDefinition (type-level only)
- */
-export type PayloadOf<T> = T extends EventDefinition<string, infer P> ? P : never;
-
-/**
- * Extract event name from EventDefinition (type-level only)
- */
-export type NameOf<T> = T extends EventDefinition<infer N extends string, unknown> ? N : never;

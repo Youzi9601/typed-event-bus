@@ -24,6 +24,12 @@ export default defineConfig({
     options.banner = {
       js: `/*! typed-event-bus v${version} | MIT License */`
     }
-    options.pure = ['console.log', 'console.debug', 'console.warn', 'console.info']
+    // Keep console.debug / console.warn / console.error in the build
+    // (debug mode and maxListeners warnings must survive minification).
+    options.pure = ['console.log', 'console.info']
+    // Shorten internal (underscore-prefixed) class members in the minified
+    // output. Runtime behavior is unchanged — this only renames private
+    // fields (subscription.ts) whose names are irrelevant to consumers.
+    options.mangleProps = /^_/
   }
 })

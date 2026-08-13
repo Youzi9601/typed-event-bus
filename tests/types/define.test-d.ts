@@ -4,7 +4,13 @@
  */
 
 import { expectTypeOf } from 'vitest';
-import { defineEvent, defineEvents, type NameOf, type PayloadOf } from '../../src/index.js';
+import {
+  defineEvent,
+  defineEvents,
+  isEventNamespace,
+  type NameOf,
+  type PayloadOf,
+} from '../../src/index.js';
 
 // Test defineEvent with payload
 const userCreated = defineEvent('user.created').payload<{ id: string; name: string }>();
@@ -48,3 +54,11 @@ expectTypeOf<PayloadOf<typeof userEvents.updated>>().toEqualTypeOf<{
 
 // Test namespace structure
 expectTypeOf(userEvents.__prefix).toEqualTypeOf<'user'>();
+
+// isEventNamespace narrows to a namespace-shaped object only:
+// the prefix is a string, but properties are not claimed to be EventDefinitions
+declare const unknownValue: unknown;
+if (isEventNamespace(unknownValue)) {
+  expectTypeOf(unknownValue.__prefix).toEqualTypeOf<string>();
+  expectTypeOf(unknownValue.created).toEqualTypeOf<unknown>();
+}

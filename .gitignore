@@ -39,9 +39,12 @@ bench-results.json
 .turbo/
 
 # Changesets
-.changeset/
+.changeset/*
+!.changeset/config.json
+!.changeset/*.md
 
 # 
 core
 plan.md
 todo.md
+typed-event-bus-design-v2.md

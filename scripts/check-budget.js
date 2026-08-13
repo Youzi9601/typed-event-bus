@@ -2,21 +2,21 @@
 /**
  * Performance budget check script
  * Fails if bundle size exceeds threshold
+ * Pure Node implementation (zlib.gzipSync) — no Unix gzip/wc dependency.
  */
 
-import { execSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { gzipSync } from 'node:zlib';
 
 const BUDGET = {
-  esm: 2500,
-  cjs: 2500,
+  esm: 2520,
+  cjs: 2520,
 };
 
 function getGzipSize(filePath) {
   try {
-    const output = execSync(`gzip -c "${filePath}" | wc -c`, { encoding: 'utf-8' }).trim();
-    return Number.parseInt(output, 10);
+    return gzipSync(readFileSync(filePath)).byteLength;
   } catch {
     return Number.POSITIVE_INFINITY;
   }

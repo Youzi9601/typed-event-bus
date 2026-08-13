@@ -38,6 +38,20 @@ describe('emit', () => {
     expect(result).toBe(true);
   });
 
+  it('listener registered during emit is not invoked in the current emit', () => {
+    const inner = vi.fn();
+    bus.on(userCreated, () => {
+      bus.on(userCreated, inner);
+    });
+
+    bus.emit(userCreated, { id: '1', name: 'Alice' });
+    expect(inner).not.toHaveBeenCalled();
+
+    bus.emit(userCreated, { id: '2', name: 'Bob' });
+    expect(inner).toHaveBeenCalledTimes(1);
+    expect(inner).toHaveBeenCalledWith({ id: '2', name: 'Bob' });
+  });
+
   it('returns false when no listeners', () => {
     const result = bus.emit(userCreated, {
       id: '1',
@@ -156,6 +170,21 @@ describe('emitAsync', () => {
 
     expect(syncListener).toHaveBeenCalledOnce();
     expect(asyncListener).toHaveBeenCalledOnce();
+  });
+
+  it('async: listener registered during emitAsync is not invoked in the current emit', async () => {
+    const inner = vi.fn();
+    const bus = createEventBus(testEvent);
+    bus.on(testEvent, () => {
+      bus.on(testEvent, inner);
+    });
+
+    await bus.emitAsync(testEvent, { id: '1' });
+    expect(inner).not.toHaveBeenCalled();
+
+    await bus.emitAsync(testEvent, { id: '2' });
+    expect(inner).toHaveBeenCalledTimes(1);
+    expect(inner).toHaveBeenCalledWith({ id: '2' });
   });
 
   it('returns resolved promise when no listeners', async () => {

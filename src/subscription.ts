@@ -11,6 +11,7 @@ export class EventSubscription implements Subscription {
   private _eventName: string;
   private _bus: EventBus;
   private _signal?: AbortSignal;
+  private _onAbort?: () => void;
 
   /**
    * Create a new subscription.
@@ -29,7 +30,8 @@ export class EventSubscription implements Subscription {
       if (signal.aborted) {
         this.unsubscribe();
       } else {
-        signal.addEventListener('abort', () => this.unsubscribe(), { once: true });
+        this._onAbort = () => this.unsubscribe();
+        signal.addEventListener('abort', this._onAbort, { once: true });
       }
     }
   }
@@ -38,7 +40,25 @@ export class EventSubscription implements Subscription {
   unsubscribe(): void {
     if (this._unsubscribed) return;
     this._unsubscribed = true;
+    if (this._signal && this._onAbort) {
+      this._signal.removeEventListener('abort', this._onAbort);
+    }
     this._bus.off(this._eventName, this._listener);
+  }
+
+  /**
+   * Internal: mark the subscription as unsubscribed without invoking bus.off.
+   * Used by once auto-removal, which removes the exact listener entry —
+   * bus.off removes the most recently registered instance (lastIndexOf),
+   * which would drop a separate persistent registration of the same listener.
+   * Detaches the abort listener so the signal does not outlive its purpose.
+   * Idempotent (repeated calls have no effect).
+   */
+  markUnsubscribed(): void {
+    this._unsubscribed = true;
+    if (this._signal && this._onAbort) {
+      this._signal.removeEventListener('abort', this._onAbort);
+    }
   }
 
   /** Optional AbortSignal integration */

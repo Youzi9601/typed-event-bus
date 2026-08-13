@@ -15,15 +15,16 @@
 typed-event-bus/
 ├── src/
 │   ├── bus.ts                  # createEventBus factory function (main entry)
+│   ├── constants.ts            # 內部 metadata keys + meta event 定義（newListenerEvent, removeListenerEvent）
 │   ├── bus/
 │   │   ├── context.ts          # BusContext - internal state (listeners, middlewares, options, registry)
 │   │   ├── emit.ts             # sync emit (fire-and-forget)
 │   │   ├── emit-async.ts       # async emit (await all, aggregates MultiError)
-│   │   ├── on.ts               # subscribe (sync/async)
+│   │   ├── on.ts               # subscribe (sync/async/prepend), newListener meta event
 │   │   ├── on-all.ts           # wildcard with correlation narrowing
 │   │   ├── once.ts             # subscribe once
-│   │   ├── off.ts              # unsubscribe single
-│   │   └── utils.ts            # listenerCount, eventNames, removeAllListeners, use
+│   │   ├── off.ts              # unsubscribe single (lastIndexOf, removeListener meta event)
+│   │   └── utils.ts            # runListeners, emitMetaEvent, listenerCount, eventNames, rawListeners, removeAllListeners, use
 │   ├── define.ts               # defineEvent, defineEvents, EventDefinition, EventNamespace
 │   ├── subscription.ts         # Subscription class
 │   ├── types.ts                # 核心型別
@@ -34,6 +35,7 @@ typed-event-bus/
 │   ├── runtime/        # 運行期測試
 │   └── types/          # 型別測試 (*.test-d.ts)
 ├── bench/              # 基準測試
+├── .changeset/         # Changesets（發布版本 + CHANGELOG）
 ├── scripts/            # CI 輔助
 └── .github/workflows/  # CI/CD
 ```
@@ -75,8 +77,10 @@ pnpm check
 ### 發布流程（僅維護者）
 
 ```bash
-pnpm changeset   # 互動式版本更新 + CHANGELOG 生成
-pnpm release     # build + publish
+pnpm changeset   # 建立 changeset（記錄變更）
+pnpm version     # 套用 changeset（版本 + CHANGELOG）
+# commit + push 後打 tag v*（git tag vX.Y.Z && git push origin vX.Y.Z）
+# GitHub Actions（release.yml）自動執行 pnpm check 並發布 npm（--provenance）
 ```
 
 ---
@@ -87,17 +91,17 @@ pnpm release     # build + publish
 
 | 階段 | 交付物 | 狀態 |
 |------|--------|------|
-| M0 PoC | 5 項 PoC 驗證 | 待執行 |
-| M0 核心 | defineEvent、defineEvents、createEventBus、emit/emitAsync/on/once/onAll、Subscription、錯誤處理 | 待執行 |
-| M1 品質 | Middleware、maxListeners、Debug mode、文檔、範例 | 規劃中 |
-| M2 發布 | Changesets、npm 發布自動化、CI 完善 | 規劃中 |
+| M0 PoC | 5 項 PoC 驗證 | 已完成 |
+| M0 核心 | defineEvent、defineEvents、createEventBus、emit/emitAsync/on/once/onAll、Subscription、錯誤處理 | 已完成 |
+| M1 品質 | Middleware、maxListeners、Debug mode、文檔、範例 | 已完成 |
+| M2 發布 | Changesets、npm 發布自動化、CI 完善 | 已完成（0.1.2 已發布） |
 
 ### 變更決策流程
 
 1. **所有變更需對應 Issue**（Bug/Feature/Question 模板）
-2. **破壞性變更需 ADR 記錄**（在 PR 中說明決策理由）
+2. **破壞性變更需在 PR 中說明決策理由**
 3. **型別變更需同步更新 type tests**
-4. **Bundle size 不得超標**（< 2.5 KB gzipped，CI 閘門，見 ADR-13）
+4. **Bundle size 不得超標**（CI 閘門：gzip-size ≤ 2520 bytes）
 
 ---
 
@@ -105,14 +109,14 @@ pnpm release     # build + publish
 
 ### 型別系統驗證
 
-- 所有型別運算必須在 **TS 5.0+** 可編譯
+- 所有型別運算必須在 **TS ≥ 5.0.0** 可編譯
 - `pnpm test:types` 100% 通過才能合併
 - 新 API 必須先寫 `tests/types/*.test-d.ts` 再實作 runtime
 
 ### 效能基準
 
 - `pnpm bench` 建立基準線
-- `scripts/check-budget.js` 作為 CI 閘門
+- `scripts/check-budget.js` 作為 CI 閘門（純 Node 實作，使用 `zlib.gzipSync`，Windows / Unix 皆可執行）
 - 任何 PR 導致效能退步 > 10% 需說明理由
 
 ---
@@ -123,11 +127,11 @@ pnpm release     # build + publish
 
 | 任務 | 使用工具 | 禁用 |
 |------|----------|------|
-| 讀檔 | `read_file` | `cat`, `head`, `tail` |
-| 寫檔 | `write_file` | `echo >`, `tee`, heredoc |
-| 改檔 | `patch` | `sed -i`, `awk` |
-| 搜尋內容 | `search_files` | `grep -r`, `rg` |
-| 找檔案 | `search_files target=files` | `find -name` |
+| 讀檔 | `read_file` | 不使用 shell 讀檔指令（`cat` / `type` 等） |
+| 寫檔 | `write_file` | 不使用 shell 寫檔指令（`echo >` / `tee` 等） |
+| 改檔 | `patch` | 不使用 `sed -i` / `awk` |
+| 搜尋內容 | `search_files` | 不使用 `grep -r` / `rg` / `findstr` |
+| 找檔案 | `search_files target=files` | 不使用 `find -name` / `dir /s` |
 | 執行命令 | `terminal` | 僅限建置、測試、git、套件管理 |
 
 ### 終端機可接受操作
@@ -158,9 +162,9 @@ Format:
 
 - [ ] `pnpm lint` 通過（Biome zero warnings）
 - [ ] `pnpm test:types` 100% 通過
-- [ ] `pnpm test` 覆蓋率 > 95%
+- [ ] `pnpm test` 通過（coverage 目標 > 95% 為手動檢視目標，以 `pnpm exec vitest run --coverage` 檢視，非 CI 閘門）
 - [ ] `pnpm build` 成功
-- [ ] `gzip-size dist/index.js` < 2500 bytes (ADR-13)
+- [ ] `node scripts/check-budget.js` ≤ 2520 bytes（CI 閘門，檢查 dist/index.js 與 dist/index.cjs）
 - [ ] 無 `console.log` / `debugger` 殘留
 - [ ] Commit 符合 Conventional Commits
 
@@ -169,6 +173,9 @@ Format:
 - API 變更 → 更新 README / API 文檔
 - 行為變更 → 更新 CHANGELOG（由 changeset 自動生成）
 - 新功能 → 新增範例或使用說明
+- 型別或行為變更 → 同步更新相關 JSDoc 註解與 type tests
+- 結構或流程變更 → 同步更新 AGENTS.md / CONTRIBUTING.md（結構圖、指令、閘門）
+- Breaking 變更 → 新增 `.changeset/` entry（版本 0.y.z 以 minor → 0.(y+1).0；版本 x.y.z（x≥1）以 major → (x+1).0.0）
 
 ---
 
@@ -184,8 +191,8 @@ Format:
 
 **若任一為是**：
 1. 在 PR 標記 `breaking` label
-2. ADR 記錄決策理由
-3. 主要版本號 +1（changeset major）
+2. 在 PR 描述中記錄決策理由
+3. 新增 `.changeset/` entry（版本 0.y.z 以 minor → 0.(y+1).0；版本 x.y.z（x≥1）以 major → (x+1).0.0）
 
 ### 回滾機制
 
@@ -240,8 +247,10 @@ interface EventDefinition<TName extends string, TPayload> {
   readonly name: TName
 }
 
-// 公開 API 不導出內部型別（如 EventsOf, RuntimeNameOf 等）
-// 僅導出：defineEvent, defineEvents, createEventBus, EventDefinition, EventNamespace, Subscription
+// 公開 API 匯出（見 src/index.ts）：defineEvent, defineEvents, EventDefinitionBuilder,
+// createEventBus, EventBus, createSubscription, EventSubscription, Subscription,
+// MultiError, defaultErrorHandler, middleware factories（含 executeMiddleware）,
+// isEventDefinition, isEventNamespace, newListenerEvent, removeListenerEvent 與核心型別
 ```
 
 ### 測試命名
@@ -250,26 +259,22 @@ interface EventDefinition<TName extends string, TPayload> {
 tests/runtime/emit.test.ts          # emit 行為測試
 tests/types/emit.test-d.ts          # emit 型別測試
 tests/runtime/onAll.test.ts         # onAll 行為測試
-tests/types/narrowing.test-d.ts     # wildcard narrowing 型別測試
+tests/types/parity.test-d.ts        # Node parity 對照型別測試
 ```
 
 ---
 
 ## 環境資訊
 
-- **Node.js**: >= 20.0.0 (CI: 20, 22)
-- **Bun**: latest (CI 測試)
-- **Deno**: v2.x (CI 測試)
-- **TypeScript**: >= 5.0.0 (peerDependency)
-- **pnpm**: 9.x
-- **Build**: tsup 8.x (esbuild)
-- **Test**: vitest 2.x
-- **Lint/Format**: Biome 1.9.x
+- **Node.js**: >= 20.0.0（CI: 22）
+- **TypeScript**: >= 5.0.0（peerDependency；開發：7.0.2）
+- **pnpm**: 9.12.3（corepack）
+- **Build**: tsup 8.5.1（esbuild）
+- **Test**: vitest 4.1.10
+- **Lint/Format**: Biome 2.5.8
 
 ---
 
 ## 參考文件
 
-- [v2 設計文件](typed-event-bus-design-v2.md) —— 架構決策、API 定案、PoC 清單
-- [專案規劃](plan.md) —— 里程碑、KPI、技術棧
 - [README](README.md) —— 專案介紹、快速開始、API 概覽

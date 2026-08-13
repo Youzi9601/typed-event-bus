@@ -13,6 +13,9 @@ export {
   type EventBus,
 } from './bus.js';
 
+// Internal metadata constants
+export { newListenerEvent, removeListenerEvent } from './constants.js';
+
 // Event definition API
 export {
   defineEvent,
@@ -24,8 +27,6 @@ export {
 // Error handling
 export {
   defaultErrorHandler,
-  executeAsyncListenerSafely,
-  executeListenerSafely,
   MultiError,
 } from './errors.js';
 // Middleware
@@ -48,10 +49,9 @@ export type {
   BusOptions,
   ErrorHandler,
   EventDefinition,
-  EventDefinitionInput,
   EventName,
+  EventNamesOf,
   EventNamespace,
-  EventNamespaceInput,
   EventPayload,
   EventRegistry,
   EventsOf,

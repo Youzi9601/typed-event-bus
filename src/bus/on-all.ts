@@ -1,4 +1,6 @@
 import type { EventBus } from '../bus.js';
+import { BRAND_KEY, PREFIX_KEY } from '../constants.js';
+import { isEventDefinition, isEventNamespace } from '../define.js';
 import type { EventDefinition, EventsOf, Subscription, WildcardHandler } from '../types.js';
 import type { BusContext } from './context.js';
 import { on } from './on.js';
@@ -7,32 +9,19 @@ import { on } from './on.js';
  * Recursively collect all EventDefinitions from a namespace (including nested namespaces)
  */
 function collectEventDefinitions(
-  namespace: Record<string, unknown>,
-  prefix = ''
+  namespace: Record<string, unknown>
 ): EventDefinition<string, unknown>[] {
   const events: EventDefinition<string, unknown>[] = [];
 
   for (const key of Object.keys(namespace)) {
-    if (key === '__prefix' || key === '__brand') continue;
+    if (key === PREFIX_KEY || key === BRAND_KEY) continue;
 
     const value = namespace[key];
 
-    // Check if it's a nested namespace
-    const isNestedNamespace =
-      typeof value === 'object' && value !== null && '__prefix' in value && '__brand' in value;
-
-    if (isNestedNamespace) {
-      // Recurse into nested namespace with updated prefix
-      const nestedPrefix = prefix ? `${prefix}.${key}` : key;
-      events.push(...collectEventDefinitions(value as Record<string, unknown>, nestedPrefix));
-    } else if (
-      typeof value === 'object' &&
-      value !== null &&
-      'name' in value &&
-      '__brand' in value
-    ) {
-      // It's an EventDefinition
-      events.push(value as EventDefinition<string, unknown>);
+    if (isEventNamespace(value)) {
+      events.push(...collectEventDefinitions(value as Record<string, unknown>));
+    } else if (isEventDefinition(value)) {
+      events.push(value);
     }
   }
 
@@ -52,7 +41,7 @@ function collectEventDefinitions(
  * @param options options
  * @returns Subscription
  */
-export function onAll<TNamespace extends { readonly __prefix: string }>(
+export function onAll<TNamespace extends { readonly [PREFIX_KEY]: string }>(
   ctx: BusContext,
   bus: EventBus,
   namespace: TNamespace,
@@ -77,17 +66,32 @@ export function onAll<TNamespace extends { readonly __prefix: string }>(
     subscriptions.push(sub);
   }
 
+  const signal = options?.signal;
   let _unsubscribed = false;
+  const unsubscribe = () => {
+    if (_unsubscribed) return;
+    _unsubscribed = true;
+    if (signal) {
+      signal.removeEventListener('abort', abortHandler);
+    }
+    for (const sub of subscriptions) {
+      sub.unsubscribe();
+    }
+  };
+  const abortHandler = () => unsubscribe();
+
+  if (signal) {
+    if (signal.aborted) {
+      unsubscribe();
+    } else {
+      signal.addEventListener('abort', abortHandler, { once: true });
+    }
+  }
+
   return {
-    unsubscribe: () => {
-      if (_unsubscribed) return;
-      _unsubscribed = true;
-      for (const sub of subscriptions) {
-        sub.unsubscribe();
-      }
-    },
+    unsubscribe,
     get signal() {
-      return subscriptions[0]?.signal;
+      return signal ?? subscriptions[0]?.signal;
     },
     get unsubscribed() {
       return _unsubscribed;

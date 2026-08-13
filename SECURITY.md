@@ -4,8 +4,8 @@
 
 | Version | Support Status |
 |---------|----------------|
-| 1.x.x | ✅ Actively maintained, security updates |
-| < 1.0.0 | ⚠️ Pre-release, no security backport guarantees |
+| 1.x.x (future) | ✅ Will be actively maintained once released |
+| < 1.0.0 (current: 0.1.x) | ⚠️ Pre-release, no security backport guarantees |
 
 ## Reporting a Vulnerability
 
@@ -67,11 +67,11 @@ This package **does not** use `Object.assign`, `_.merge`, or any operations that
 
 - No built-in rate limiting; massive event emission may block the event loop
 - Implement backpressure mechanisms at the application layer
-- `maxListeners` warning (planned for P1) helps detect abnormal subscriptions
+- Built-in `maxListeners` warning helps detect abnormal subscription growth (see `bus.options.maxListeners`)
 
-### Cross-Process Transport
+### Cross-Process Transport (Planned)
 
-When using `@typed-event-bus/adapter-*` adapters:
+The planned `@typed-event-bus/adapter-*` packages (to be published after 1.0) will need transport-level hardening. Design guidance for those adapters:
 - Electron: enable `contextBridge` isolation
 - Worker: validate `origin` and `data` structure
 - WebSocket: use WSS, validate connection identity

@@ -7,6 +7,9 @@
  * - No string-based APIs, all type-safe through EventDefinition references
  */
 
+import { PREFIX_KEY } from './constants.js';
+import type { ErrorHandler } from './errors.js';
+
 /**
  * EventDefinition is the single source of truth for an event.
  * Runtime: { name: string } — serializable, safe for cross-process transport
@@ -30,110 +33,91 @@ export type EventName<T> = T extends EventDefinition<infer N extends string, unk
 export type EventPayload<T> = T extends EventDefinition<string, infer P> ? P : never;
 
 /**
- * Single event definition input within a namespace
- */
-export interface EventDefinitionInput<TPayload> {
-  /** Payload type (type-level only) */
-  _payload?: TPayload;
-}
-
-/**
- * Namespace definition input structure
- * Uses const assertion to preserve literal key names
- */
-export type EventNamespaceInput<
-  TPrefix extends string,
-  TDefs extends Record<string, EventDefinitionInput<unknown>>,
-> = {
-  [K in keyof TDefs]: EventDefinitionInput<TDefs[K]['_payload']>;
-} & { __prefix: TPrefix };
-
-/**
  * Namespace runtime structure
- * Excludes __prefix key; index signature allows __prefix as string
+ * Excludes __prefix key; values are EventDefinitions
  */
 export type EventNamespace<
   TPrefix extends string,
   TDefs extends Record<string, EventDefinition<string, unknown>>,
 > = {
   /** Namespace prefix, e.g. "user" */
-  readonly __prefix: TPrefix;
+  readonly [PREFIX_KEY]: TPrefix;
 } & {
-  readonly [K in keyof TDefs as Exclude<K, '__prefix'>]: TDefs[K];
-} & Record<string, EventDefinition<string, unknown>>;
+  readonly [K in keyof TDefs as Exclude<K, typeof PREFIX_KEY>]: TDefs[K];
+};
 
 /**
- * Discriminated union of all events from a namespace
+ * Discriminated union of all events from a namespace (including nested namespaces)
  * This is the key to wildcard correlation narrowing
  */
-export type EventsOf<TNamespace extends { readonly __prefix: string }> = {
-  [K in keyof TNamespace]: K extends '__prefix'
+export type EventsOf<TNamespace extends { readonly [PREFIX_KEY]: string }> = {
+  [K in keyof TNamespace]: K extends typeof PREFIX_KEY
     ? never
     : TNamespace[K] extends EventDefinition<string, unknown>
       ? {
           event: EventName<TNamespace[K]>;
           payload: EventPayload<TNamespace[K]>;
         }
-      : never;
+      : TNamespace[K] extends { readonly [PREFIX_KEY]: string }
+        ? EventsOf<TNamespace[K]>
+        : never;
 }[keyof TNamespace];
 
 /**
- * Union of all event names from a namespace
+ * Union of all event names from a namespace (including nested namespaces)
  */
-export type EventNamesOf<TNamespace extends { readonly __prefix: string }> = {
-  [K in keyof TNamespace]: K extends '__prefix'
+export type EventNamesOf<TNamespace extends { readonly [PREFIX_KEY]: string }> = {
+  [K in keyof TNamespace]: K extends typeof PREFIX_KEY
     ? never
     : TNamespace[K] extends EventDefinition<string, unknown>
       ? EventName<TNamespace[K]>
-      : never;
+      : TNamespace[K] extends { readonly [PREFIX_KEY]: string }
+        ? EventNamesOf<TNamespace[K]>
+        : never;
 }[keyof TNamespace];
 
 /**
- * Event registry: namespace name -> EventNamespace
- * Also supports single EventDefinition as input
- * Also supports DefineEventsOutput (Record with __prefix)
+ * Event registry: single EventDefinition, single namespace, or multi-namespace merge
  */
 export type EventRegistry =
-  | Record<
-      string,
-      { readonly __prefix: string } & Record<string, EventDefinition<string, unknown> | string>
-    >
-  | EventDefinition<string, unknown>;
+  | EventDefinition<string, unknown>
+  | ({ readonly [PREFIX_KEY]: string } & Record<string, unknown>)
+  | Record<string, { readonly [PREFIX_KEY]: string } & Record<string, unknown>>;
 
 /**
- * Discriminated union of all events from a registry
- * Supports Record<string, EventNamespace> or single EventDefinition
+ * Discriminated union of all events from a registry.
+ * Supports single EventDefinition, single namespace (with nesting),
+ * or Record<string, EventNamespace> merges.
  */
 export type AllEventsOf<TRegistry extends EventRegistry> =
-  TRegistry extends Record<
-    string,
-    EventNamespace<string, Record<string, EventDefinition<string, unknown>>>
-  >
+  TRegistry extends EventDefinition<string, unknown>
     ? {
-        [K in keyof TRegistry]: EventsOf<TRegistry[K]>;
-      }[keyof TRegistry]
-    : TRegistry extends EventDefinition<string, unknown>
-      ? {
-          event: EventName<TRegistry>;
-          payload: EventPayload<TRegistry>;
-        }
-      : never;
+        event: EventName<TRegistry>;
+        payload: EventPayload<TRegistry>;
+      }
+    : TRegistry extends { readonly [PREFIX_KEY]: string }
+      ? EventsOf<TRegistry>
+      : TRegistry extends Record<string, { readonly [PREFIX_KEY]: string }>
+        ? {
+            [K in keyof TRegistry]: EventsOf<TRegistry[K]>;
+          }[keyof TRegistry]
+        : never;
 
 /**
- * Union of all event names from a registry
- * Supports Record<string, EventNamespace> or single EventDefinition
+ * Union of all event names from a registry.
+ * Supports single EventDefinition, single namespace (with nesting),
+ * or Record<string, EventNamespace> merges.
  */
 export type AllEventNamesOf<TRegistry extends EventRegistry> =
-  TRegistry extends Record<
-    string,
-    EventNamespace<string, Record<string, EventDefinition<string, unknown>>>
-  >
-    ? {
-        [K in keyof TRegistry]: EventNamesOf<TRegistry[K]>;
-      }[keyof TRegistry]
-    : TRegistry extends EventDefinition<string, unknown>
-      ? EventName<TRegistry>
-      : never;
+  TRegistry extends EventDefinition<string, unknown>
+    ? EventName<TRegistry>
+    : TRegistry extends { readonly [PREFIX_KEY]: string }
+      ? EventNamesOf<TRegistry>
+      : TRegistry extends Record<string, { readonly [PREFIX_KEY]: string }>
+        ? {
+            [K in keyof TRegistry]: EventNamesOf<TRegistry[K]>;
+          }[keyof TRegistry]
+        : never;
 
 /**
  * Sync listener handler
@@ -172,29 +156,9 @@ export interface Subscription {
 
 /**
  * Error handler hook signature
+ * Single source of truth: defined in errors.ts, re-exported here.
  */
-export type ErrorHandler = (
-  error: unknown,
-  event: EventDefinition<string, unknown>,
-  payload: unknown
-) => void;
-
-/**
- * MultiError for emitAsync
- */
-export class MultiError extends Error {
-  override readonly name = 'MultiError';
-  readonly errors: unknown[];
-
-  constructor(errors: unknown[], message?: string) {
-    super(
-      message ??
-        `MultiError: ${errors.length} error${errors.length === 1 ? '' : 's'} occurred during async emission`
-    );
-    this.errors = errors;
-    Object.setPrototypeOf(this, MultiError.prototype);
-  }
-}
+export type { ErrorHandler };
 
 /**
  * Middleware function signature
@@ -203,7 +167,7 @@ export class MultiError extends Error {
 export type Middleware = <TEvent extends EventDefinition<string, unknown>>(
   event: TEvent,
   payload: EventPayload<TEvent>,
-  next: () => void | Promise<void>
+  next: () => Promise<void>
 ) => void | Promise<void>;
 
 /**

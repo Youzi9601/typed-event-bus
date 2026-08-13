@@ -5,8 +5,6 @@ Thanks for your interest in contributing to `typed-event-bus`! This guide will h
 ## Before You Begin, Please Read
 
 - [Code of Conduct](CODE_OF_CONDUCT.md)
-- [Security Policy](SECURITY.md)
-- [Project Plan](plan.md) — understand core design philosophy and API decisions
 
 ## Development Environment Setup
 
@@ -48,20 +46,21 @@ pnpm build
 ```
 src/
 ├── bus.ts                  # createEventBus factory function (main entry)
+├── constants.ts            # internal metadata keys + meta event definitions (newListenerEvent, removeListenerEvent)
 ├── bus/
 │   ├── context.ts          # BusContext - internal state (listeners, middlewares, options, registry)
 │   ├── emit.ts             # sync emit (fire-and-forget)
 │   ├── emit-async.ts       # async emit (await all, aggregates MultiError)
-│   ├── on.ts               # subscribe (sync/async)
+│   ├── on.ts               # subscribe (sync/async/prepend), newListener meta event
 │   ├── on-all.ts           # wildcard with correlation narrowing
 │   ├── once.ts             # subscribe once
-│   ├── off.ts              # unsubscribe single
-│   └── utils.ts            # listenerCount, eventNames, removeAllListeners, use
-├── define.ts               # defineEvent, defineEvents, EventDefinition, EventNamespace
-├── subscription.ts         # Subscription class
+│   ├── off.ts              # unsubscribe single (lastIndexOf semantics, removeListener meta event)
+│   └── utils.ts            # runListeners, emitMetaEvent, listenerCount, eventNames, rawListeners, removeAllListeners, use
+├── define.ts               # defineEvent (builder chain), defineEvents, type guards
+├── subscription.ts         # EventSubscription class, createSubscription
 ├── types.ts                # Core type definitions
 ├── middleware.ts           # Middleware types and execution logic
-├── errors.ts               # MultiError, onError types
+├── errors.ts               # MultiError, defaultErrorHandler
 └── index.ts                # Public API exports
 
 tests/
@@ -101,13 +100,13 @@ Branch naming convention:
 **Core principles:**
 - **Types first**: Write type tests first (`tests/types/*.test-d.ts`), then implement runtime
 - **Zero dependencies**: Core package `dependencies` must remain empty
-- **Bundle size**: After every change verify `pnpm build && gzip-size dist/index.js` < 2.5 KB (ADR-13)
+- **Bundle size**: After every change verify `pnpm build && node scripts/check-budget.js` ≤ 2520 bytes (CI gate, checks both `dist/index.js` and `dist/index.cjs`)
 
 **Required checks:**
 ```bash
 pnpm lint           # Biome lint + format
 pnpm test:types     # Type tests 100% pass
-pnpm test           # Runtime test coverage > 95%
+pnpm test           # Runtime tests pass (coverage target > 95%, manual check via pnpm exec vitest run --coverage)
 pnpm build          # Build success
 ```
 
@@ -174,7 +173,7 @@ Closes #42
 
 | Test Type | Location | Command | Requirement |
 |-----------|----------|---------|-------------|
-| Runtime | `tests/runtime/*.test.ts` | `pnpm test` | Coverage > 95% |
+| Runtime | `tests/runtime/*.test.ts` | `pnpm test` | Coverage > 95% (manual check) |
 | Type-level | `tests/types/*.test-d.ts` | `pnpm test:types` | 100% pass |
 | Benchmark | `bench/*.bench.ts` | `pnpm bench` | No regression |
 
@@ -197,18 +196,22 @@ bus.emit(userCreated, { id: 123 })    // ❌ Compile error
 Maintainers only:
 
 ```bash
-# 1. Update version (auto-generate CHANGELOG)
+# 1. Create a changeset (records the change)
 pnpm changeset
 
-# 2. Build and publish
-pnpm release
+# 2. Consume changesets (bump version, generate CHANGELOG)
+pnpm version
+
+# 3. Commit, push, then create a version tag
+git tag v<new-version> && git push origin v<new-version>
 ```
+
+Pushing a `v*` tag triggers the Release workflow (`.github/workflows/release.yml`), which runs `pnpm check` and publishes to npm with provenance (`npm publish --provenance`).
 
 ## Getting Help
 
 - Check [existing Issues](https://github.com/Youzi9601/typed-event-bus/issues)
 - Open a [Question Issue](.github/ISSUE_TEMPLATE/question.yml)
-- Reference the [v2 Design Document](typed-event-bus-design-v2.md) for architecture decisions
 
 ---
 

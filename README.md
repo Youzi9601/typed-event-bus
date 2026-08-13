@@ -4,7 +4,7 @@
 
 [![npm version](https://img.shields.io/npm/v/@youzi9601/typed-event-bus.svg)](https://www.npmjs.com/package/@youzi9601/typed-event-bus)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0.0+-blue.svg)](https://www.typescriptlang.org/)
 [![Bundle Size](https://img.shields.io/bundlephobia/minzip/@youzi9601/typed-event-bus)](https://bundlephobia.com/package/@youzi9601/typed-event-bus)
 
 ---
@@ -100,7 +100,9 @@ bus.onAll(userEvents, ({ event, payload }) => {
 await bus.emitAsync(userEvents.created, { id: '123', name: 'Alice' })
 
 // 7. Unsubscribe
-const sub = bus.on(userEvents.created, handler)
+const sub = bus.on(userEvents.created, (payload) => {
+  console.log(payload.id, payload.name)
+})
 sub.unsubscribe()
 ```
 
@@ -112,7 +114,7 @@ sub.unsubscribe()
 
 | Function | Description |
 |----------|-------------|
-| `defineEvent(name).payload<T>()` | Create a single event definition (Builder chain, ADR-11) |
+| `defineEvent(name).payload<T>()` | Create a single event definition (builder chain) |
 | `defineEvents(prefix, definitions)` | Create a namespace with auto-prefixed names |
 
 ### Event Bus Creation
@@ -134,7 +136,22 @@ sub.unsubscribe()
 |--------|-------------|
 | `bus.on(event, listener, options?)` | Subscribe, returns `Subscription` |
 | `bus.once(event, listener, options?)` | Subscribe once |
+| `bus.prependListener(event, listener, options?)` | Subscribe at the front of the listener order (Node parity) |
+| `bus.prependOnceListener(event, listener, options?)` | Subscribe once, at the front of the listener order (Node parity) |
 | `bus.onAll(namespace, handler, options?)` | Namespace wildcard, handler receives `{ event, payload }` |
+
+### Meta Events (Node parity)
+
+`newListener` fires before a listener is registered, `removeListener` after it is removed — including `once` auto-removal and `removeAllListeners`. Subscribe with the built-in definitions:
+
+```typescript
+import { newListenerEvent, removeListenerEvent } from '@youzi9601/typed-event-bus'
+
+bus.on(newListenerEvent, listener => { /* listener being registered */ })
+bus.on(removeListenerEvent, listener => { /* listener being removed */ })
+```
+
+Meta events run with the same listener semantics as `emit` (snapshot, `once` auto-removal, errors → `onError`) but do not run middleware.
 
 ### Subscription
 
@@ -152,7 +169,16 @@ sub.unsubscribed         // Whether subscription has been cancelled
 | `bus.use(middleware)` | Register middleware |
 | `bus.listenerCount(event)` | Get listener count |
 | `bus.eventNames()` | Get all registered event names |
+| `bus.rawListeners(event)` | Get listener functions in registration order (once listeners returned unwrapped, unlike Node) |
 | `bus.removeAllListeners(event?)` | Remove all listeners |
+| `bus.off(event, listener)` | Remove a specific listener (removes the last matching registration, Node parity) |
+
+### Bus Options
+
+| Option | Description |
+|--------|-------------|
+| `maxListeners` | Warn via `console.warn` when a single event exceeds this many listeners (Node parity) |
+| `debug` | Log subscribe/unsubscribe/emit activity to `console.debug` |
 
 ---
 
@@ -236,7 +262,7 @@ pnpm format            # biome format --write
 
 # Benchmarking
 pnpm bench
-node scripts/check-budget.js
+node scripts/check-budget.js   # pure Node (zlib), works on any platform
 
 # Full check (CI equivalent)
 pnpm check
@@ -249,17 +275,18 @@ pnpm check
 ```
 src/
 ├── bus.ts                  # createEventBus factory function (main entry)
+├── constants.ts            # internal metadata keys + meta event definitions (newListenerEvent, removeListenerEvent)
 ├── bus/
 │   ├── context.ts          # BusContext - internal state (listeners, middlewares, options, registry)
 │   ├── emit.ts             # sync emit (fire-and-forget)
 │   ├── emit-async.ts       # async emit (await all, aggregates MultiError)
-│   ├── on.ts               # subscribe (sync/async)
+│   ├── on.ts               # subscribe (sync/async/prepend), newListener meta event
 │   ├── on-all.ts           # wildcard with correlation narrowing
 │   ├── once.ts             # subscribe once
-│   ├── off.ts              # unsubscribe single
-│   └── utils.ts            # listenerCount, eventNames, removeAllListeners, use
+│   ├── off.ts              # unsubscribe single (lastIndexOf semantics, removeListener meta event)
+│   └── utils.ts            # runListeners, emitMetaEvent, listenerCount, eventNames, rawListeners, removeAllListeners, use
 ├── define.ts               # defineEvent (builder chain), defineEvents, type guards
-├── errors.ts               # MultiError, defaultErrorHandler, executeListenerSafely, executeAsyncListenerSafely
+├── errors.ts               # MultiError, defaultErrorHandler
 ├── middleware.ts           # executeMiddleware, createLogging/Timing/MetricsMiddleware
 ├── subscription.ts         # EventSubscription class, createSubscription
 ├── types.ts                # Core types: EventDefinition, EventNamespace, EventsOf, WildcardHandler, Subscription, ErrorHandler, Middleware, BusOptions, PayloadOf, NameOf
@@ -280,8 +307,6 @@ scripts/            # CI helper scripts
 Contributions welcome! Please read:
 - [Code of Conduct](CODE_OF_CONDUCT.md)
 - [Contributing Guide](CONTRIBUTING.md)
-- [Security Policy](SECURITY.md)
-- [Project Plan](plan.md) — understand core design philosophy and API decisions
 
 ---
 
@@ -296,5 +321,3 @@ Contributions welcome! Please read:
 - [GitHub Repository](https://github.com/Youzi9601/typed-event-bus)
 - [Issue Tracker](https://github.com/Youzi9601/typed-event-bus/issues)
 - [Discussions](https://github.com/Youzi9601/typed-event-bus/discussions)
-- [v2 Design Document](typed-event-bus-design-v2.md)
-- [Project Plan](plan.md)

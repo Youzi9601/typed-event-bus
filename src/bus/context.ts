@@ -3,16 +3,20 @@
  * Define Once, Use Everywhere
  */
 
+import { PREFIX_KEY } from '../constants.js';
 import { defaultErrorHandler } from '../errors.js';
+import type { EventSubscription } from '../subscription.js';
 import type { BusOptions, EventDefinition, Listener, Middleware } from '../types.js';
 
 // ============================================================================
 // Internal Types
 // ============================================================================
 
-type ListenerEntry<TPayload> = {
+export type ListenerEntry<TPayload> = {
   listener: Listener<TPayload>;
   once: boolean;
+  /** Subscription returned to the caller — marked unsubscribed on auto-removal */
+  subscription?: EventSubscription;
 };
 
 type ListenerMap = Map<string, Set<ListenerEntry<unknown>>>;
@@ -20,7 +24,7 @@ type ListenerMap = Map<string, Set<ListenerEntry<unknown>>>;
 // Normalized registry type (always Record form after createEventBus normalization)
 export type NormalizedRegistry = Record<
   string,
-  { readonly __prefix: string } & Record<string, EventDefinition<string, unknown> | string>
+  { readonly [PREFIX_KEY]: string } & Record<string, EventDefinition<string, unknown> | string>
 >;
 
 // ============================================================================

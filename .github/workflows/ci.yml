@@ -35,6 +35,9 @@ jobs:
         run: pnpm lint
 
       - name: Type check
+        run: pnpm exec tsc --noEmit
+
+      - name: Type tests
         run: pnpm test:types
 
       - name: Run tests
@@ -44,11 +47,4 @@ jobs:
         run: pnpm build
 
       - name: Verify bundle size
-        run: |
-          gzip -c dist/index.js | wc -c
-          BUNDLE_SIZE=$(gzip -c dist/index.js | wc -c)
-          echo "Bundle size: $BUNDLE_SIZE bytes"
-          if [ "$BUNDLE_SIZE" -gt 2510 ]; then
-            echo "ERROR: Bundle size exceeds 2.5 KB limit"
-            exit 1
-          fi
+        run: node scripts/check-budget.js

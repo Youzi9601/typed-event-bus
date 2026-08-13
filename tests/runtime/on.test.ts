@@ -63,6 +63,19 @@ describe('on', () => {
     expect(sub.unsubscribed).toBe(true);
   });
 
+  it('aborting signal after manual unsubscribe does not change state', () => {
+    const listener = vi.fn();
+    const controller = new AbortController();
+    const sub = bus.on(userCreated, listener, { signal: controller.signal });
+
+    sub.unsubscribe();
+    controller.abort();
+    bus.emit(userCreated, { id: '1', name: 'Alice' });
+
+    expect(listener).not.toHaveBeenCalled();
+    expect(sub.unsubscribed).toBe(true);
+  });
+
   it('subscription has signal property when provided', () => {
     const listener = vi.fn();
     const controller = new AbortController();
