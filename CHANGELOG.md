@@ -39,6 +39,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.2] - 2026-08-13
+
+### Security
+- Fixed 2 critical CVEs in vitest (CVE-2025-24964, CVE-2026-47429) by upgrading vitest 2.1.4 → 4.1.10
+- Fixed 1 high CVE in vite (CVE-2026-53571) and 1 medium CVE (CVE-2026-53632) by upgrading vite 5.4.21 → 8.2.1
+
+### Changed
+- Upgraded TypeScript 5.6.3 → 7.0.2 (removed deprecated `downlevelIteration` option)
+- Upgraded @biomejs/biome 1.9.4 → 2.5.8 (migrated config to v2 schema via `biome migrate`)
+- Upgraded vitest 2.1.4 → 4.1.10
+- Upgraded vite 5.4.21 → 8.2.1
+- Upgraded @types/node 22.9.0 → 26.2.0
+- Upgraded tsup 8.3.5 → 8.5.1
+- Upgraded @changesets/cli 2.27.11 → 3.0.0
+- Upgraded esbuild 0.24.2 → 0.28.2
+- Upgraded @vitest/coverage-v8 2.1.4 → 4.1.10
+- Build process: switched from tsup's internal `rollup-plugin-dts` to standalone `tsc --emitDeclarationOnly` for `.d.ts` generation (tsup's bundled dts plugin incompatible with TS 7.x)
+- Biome config: updated `noConsole` rule to allow log/debug/warn/error/info, fixed ignore patterns for v2
+- Source code: `Object.prototype.hasOwnProperty.call` → `Object.hasOwn`, import reordering via Biome organizeImports
+
+### Fixed
+- Fixed unsafe optional chaining in tests/runtime/error.test.ts
+- Fixed TypeScript 7.x compatibility (removed `downlevelIteration`, added `declarationDir`)
+
+---
+
 ## [0.1.0] - TBD 2026/08/11
 
 ### Added
