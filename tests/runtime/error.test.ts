@@ -3,7 +3,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { MultiError, createEventBus, defineEvent } from '../../src/index';
+import { createEventBus, defineEvent, MultiError } from '../../src/index';
 
 describe('error handling', () => {
   let bus: ReturnType<typeof createEventBus>;
@@ -27,8 +27,9 @@ describe('error handling', () => {
     expect(onError).toHaveBeenCalledOnce();
     const firstCall = onError.mock.calls[0];
     expect(firstCall).toBeDefined();
-    expect(firstCall?.[0]).toBeInstanceOf(Error);
-    expect((firstCall?.[0] as Error).message).toBe('Test error');
+    const error = firstCall?.[0];
+    expect(error).toBeInstanceOf(Error);
+    expect(error?.message).toBe('Test error');
     expect(firstCall?.[1].name).toBe('user.created');
     expect(firstCall?.[2]).toEqual({ id: '1', name: 'Alice' });
   });

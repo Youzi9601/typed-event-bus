@@ -3,9 +3,8 @@
  * Define Once, Use Everywhere
  */
 
-import type { BusOptions, EventDefinition, Listener, Middleware } from '../types.js';
-
 import { defaultErrorHandler } from '../errors.js';
+import type { BusOptions, EventDefinition, Listener, Middleware } from '../types.js';
 
 // ============================================================================
 // Internal Types

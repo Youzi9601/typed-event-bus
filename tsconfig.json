@@ -16,7 +16,7 @@
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
     "allowImportingTsExtensions": true,
-    "downlevelIteration": true,
+    "declarationDir": "dist",
     "paths": {
       "@/*": ["./src/*"]
     }

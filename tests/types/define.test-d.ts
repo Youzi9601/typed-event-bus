@@ -4,7 +4,7 @@
  */
 
 import { expectTypeOf } from 'vitest';
-import { type NameOf, type PayloadOf, defineEvent, defineEvents } from '../../src/index.js';
+import { defineEvent, defineEvents, type NameOf, type PayloadOf } from '../../src/index.js';
 
 // Test defineEvent with payload
 const userCreated = defineEvent('user.created').payload<{ id: string; name: string }>();

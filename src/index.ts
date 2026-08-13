@@ -7,63 +7,59 @@
  * @packageDocumentation
  */
 
-// Core types
-export type {
-  EventDefinition,
-  EventNamespace,
-  EventRegistry,
-  AllEventsOf,
-  AllEventNamesOf,
-  EventsOf,
-  EventName,
-  EventPayload,
-  Listener,
-  WildcardHandler,
-  Subscription,
-  ErrorHandler,
-  Middleware,
-  BusOptions,
-  EventDefinitionInput,
-  EventNamespaceInput,
-  SyncListener,
-  AsyncListener,
-  PayloadOf,
-  NameOf,
-} from './types.js';
-
-// Event definition API
-export {
-  defineEvent,
-  defineEvents,
-  isEventDefinition,
-  isEventNamespace,
-  type EventDefinitionBuilder,
-} from './define.js';
-
 // Bus API
 export {
   createEventBus,
   type EventBus,
 } from './bus.js';
 
-// Subscription
+// Event definition API
 export {
-  EventSubscription,
-  createSubscription,
-} from './subscription.js';
-
+  defineEvent,
+  defineEvents,
+  type EventDefinitionBuilder,
+  isEventDefinition,
+  isEventNamespace,
+} from './define.js';
 // Error handling
 export {
-  MultiError,
   defaultErrorHandler,
-  executeListenerSafely,
   executeAsyncListenerSafely,
+  executeListenerSafely,
+  MultiError,
 } from './errors.js';
-
 // Middleware
 export {
-  executeMiddleware,
   createLoggingMiddleware,
-  createTimingMiddleware,
   createMetricsMiddleware,
+  createTimingMiddleware,
+  executeMiddleware,
 } from './middleware.js';
+// Subscription
+export {
+  createSubscription,
+  EventSubscription,
+} from './subscription.js';
+// Core types
+export type {
+  AllEventNamesOf,
+  AllEventsOf,
+  AsyncListener,
+  BusOptions,
+  ErrorHandler,
+  EventDefinition,
+  EventDefinitionInput,
+  EventName,
+  EventNamespace,
+  EventNamespaceInput,
+  EventPayload,
+  EventRegistry,
+  EventsOf,
+  Listener,
+  Middleware,
+  NameOf,
+  PayloadOf,
+  Subscription,
+  SyncListener,
+  WildcardHandler,
+} from './types.js';

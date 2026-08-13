@@ -104,34 +104,36 @@ export type EventRegistry =
  * Discriminated union of all events from a registry
  * Supports Record<string, EventNamespace> or single EventDefinition
  */
-export type AllEventsOf<TRegistry extends EventRegistry> = TRegistry extends Record<
-  string,
-  EventNamespace<string, Record<string, EventDefinition<string, unknown>>>
->
-  ? {
-      [K in keyof TRegistry]: EventsOf<TRegistry[K]>;
-    }[keyof TRegistry]
-  : TRegistry extends EventDefinition<string, unknown>
+export type AllEventsOf<TRegistry extends EventRegistry> =
+  TRegistry extends Record<
+    string,
+    EventNamespace<string, Record<string, EventDefinition<string, unknown>>>
+  >
     ? {
-        event: EventName<TRegistry>;
-        payload: EventPayload<TRegistry>;
-      }
-    : never;
+        [K in keyof TRegistry]: EventsOf<TRegistry[K]>;
+      }[keyof TRegistry]
+    : TRegistry extends EventDefinition<string, unknown>
+      ? {
+          event: EventName<TRegistry>;
+          payload: EventPayload<TRegistry>;
+        }
+      : never;
 
 /**
  * Union of all event names from a registry
  * Supports Record<string, EventNamespace> or single EventDefinition
  */
-export type AllEventNamesOf<TRegistry extends EventRegistry> = TRegistry extends Record<
-  string,
-  EventNamespace<string, Record<string, EventDefinition<string, unknown>>>
->
-  ? {
-      [K in keyof TRegistry]: EventNamesOf<TRegistry[K]>;
-    }[keyof TRegistry]
-  : TRegistry extends EventDefinition<string, unknown>
-    ? EventName<TRegistry>
-    : never;
+export type AllEventNamesOf<TRegistry extends EventRegistry> =
+  TRegistry extends Record<
+    string,
+    EventNamespace<string, Record<string, EventDefinition<string, unknown>>>
+  >
+    ? {
+        [K in keyof TRegistry]: EventNamesOf<TRegistry[K]>;
+      }[keyof TRegistry]
+    : TRegistry extends EventDefinition<string, unknown>
+      ? EventName<TRegistry>
+      : never;
 
 /**
  * Sync listener handler

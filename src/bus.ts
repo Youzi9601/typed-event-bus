@@ -1,3 +1,11 @@
+import { createBusContext } from './bus/context.js';
+import { emit } from './bus/emit.js';
+import { emitAsync } from './bus/emit-async.js';
+import { off } from './bus/off.js';
+import { on as onImpl } from './bus/on.js';
+import { onAll as onAllImpl } from './bus/on-all.js';
+import { once as onceImpl } from './bus/once.js';
+import { eventNames, listenerCount, removeAllListeners, use } from './bus/utils.js';
 import type {
   BusOptions,
   EventDefinition,
@@ -9,15 +17,6 @@ import type {
   Subscription,
   WildcardHandler,
 } from './types.js';
-
-import { createBusContext } from './bus/context.js';
-import { emitAsync } from './bus/emit-async.js';
-import { emit } from './bus/emit.js';
-import { off } from './bus/off.js';
-import { onAll as onAllImpl } from './bus/on-all.js';
-import { on as onImpl } from './bus/on.js';
-import { once as onceImpl } from './bus/once.js';
-import { eventNames, listenerCount, removeAllListeners, use } from './bus/utils.js';
 
 /**
  * Create event bus.
@@ -52,8 +51,8 @@ export function createEventBus<TRegistry extends EventRegistry = EventRegistry>(
 ) {
   let normalizedRegistry: EventRegistry;
 
-  const hasPrefix = Object.prototype.hasOwnProperty.call(registry, '__prefix');
-  const hasBrand = Object.prototype.hasOwnProperty.call(registry, '__brand');
+  const hasPrefix = Object.hasOwn(registry, '__prefix');
+  const hasBrand = Object.hasOwn(registry, '__brand');
 
   if (hasPrefix) {
     normalizedRegistry = { default: registry } as EventRegistry;
@@ -292,41 +291,40 @@ export type EventBus<TRegistry extends EventRegistry = EventRegistry> = ReturnTy
   typeof createEventBus<TRegistry>
 >;
 
-export type {
-  EventDefinition,
-  EventNamespace,
-  EventRegistry,
-  AllEventsOf,
-  AllEventNamesOf,
-  EventsOf,
-  EventName,
-  EventPayload,
-  Listener,
-  WildcardHandler,
-  Subscription,
-  ErrorHandler,
-  Middleware,
-  BusOptions,
-} from './types.js';
-
 export {
   defineEvent,
   defineEvents,
   isEventDefinition,
   isEventNamespace,
-  type PayloadOf,
   type NameOf,
+  type PayloadOf,
 } from './define.js';
-export { EventSubscription, createSubscription } from './subscription.js';
 export {
-  MultiError,
   defaultErrorHandler,
-  executeListenerSafely,
   executeAsyncListenerSafely,
+  executeListenerSafely,
+  MultiError,
 } from './errors.js';
 export {
-  executeMiddleware,
   createLoggingMiddleware,
-  createTimingMiddleware,
   createMetricsMiddleware,
+  createTimingMiddleware,
+  executeMiddleware,
 } from './middleware.js';
+export { createSubscription, EventSubscription } from './subscription.js';
+export type {
+  AllEventNamesOf,
+  AllEventsOf,
+  BusOptions,
+  ErrorHandler,
+  EventDefinition,
+  EventName,
+  EventNamespace,
+  EventPayload,
+  EventRegistry,
+  EventsOf,
+  Listener,
+  Middleware,
+  Subscription,
+  WildcardHandler,
+} from './types.js';

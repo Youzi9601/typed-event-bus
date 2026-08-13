@@ -13,7 +13,7 @@ describe('defineEvent', () => {
 
   it('has __brand property (non-enumerable)', () => {
     const userCreated = defineEvent('user.created').payload<{ id: string }>();
-    expect(Object.prototype.hasOwnProperty.call(userCreated, '__brand')).toBe(true);
+    expect(Object.hasOwn(userCreated, '__brand')).toBe(true);
     expect(Object.keys(userCreated)).not.toContain('__brand');
   });
 

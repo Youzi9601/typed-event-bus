@@ -21,7 +21,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && tsc --emitDeclarationOnly --declaration --declarationMap --rootDir src --outDir dist src/index.ts --ignoreConfig",
     "build:watch": "tsup --watch",
     "dev": "tsup --watch",
     "test": "vitest run",
@@ -65,13 +65,15 @@
     "typescript": ">=5.0.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "1.9.4",
-    "@changesets/cli": "2.27.11",
-    "@types/node": "22.9.0",
-    "@vitest/coverage-v8": "^2.1.4",
-    "tsup": "8.3.5",
-    "typescript": "5.6.3",
-    "vitest": "2.1.4"
+    "@biomejs/biome": "2.5.8",
+    "@changesets/cli": "3.0.0",
+    "@types/node": "26.2.0",
+    "@vitest/coverage-v8": "^4.1.10",
+    "esbuild": "^0.28.2",
+    "tsup": "8.5.1",
+    "typescript": "7.0.2",
+    "vite": "^8.2.1",
+    "vitest": "4.1.10"
   },
   "packageManager": "pnpm@9.12.3"
 }
