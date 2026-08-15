@@ -149,11 +149,6 @@ Before EVERY tool call, output a brief plain-language explanation:
 
 After receiving tool results, output a brief interpretation before proceeding.
 
-Format:
-> [action intent]: <one sentence>
-→ [tool call]
-> [result interpretation]: <one sentence>
-
 ---
 
 ## 驗證政策
