@@ -43,6 +43,9 @@ jobs:
       - name: Run tests
         run: pnpm test
 
+      - name: Check coverage
+        run: pnpm exec vitest run --coverage --reporter=text --reporter=lcov
+
       - name: Build
         run: pnpm build
 

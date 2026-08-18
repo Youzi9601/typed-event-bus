@@ -40,7 +40,7 @@ Closes #(issue number)
 - [ ] `pnpm test:types` passes
 - [ ] `pnpm test` passes
 - [ ] `pnpm build` succeeds
-- [ ] Bundle size within budget (< 2.5 KB gzipped)
+- [ ] Bundle size within budget (≤ 3072 bytes gzipped)
 - [ ] Documentation updated (README / API docs / CHANGELOG)
 - [ ] No `console.log` / `debugger` remnants
 - [ ] Commit messages follow Conventional Commits

@@ -26,13 +26,13 @@ body:
     id: version
     attributes:
       label: Package Version
-      placeholder: "0.1.0"
+      placeholder: "0.2.0"
     validations:
       required: false
   - type: input
     id: runtime
     attributes:
       label: Runtime Environment
-      placeholder: "Electron 30 / Node.js 22"
+      placeholder: "Node.js 22 LTS / Electron 30"
     validations:
       required: false

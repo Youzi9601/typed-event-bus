@@ -13,6 +13,7 @@ import { eventNames, listenerCount, rawListeners, removeAllListeners, use } from
 import { BRAND_KEY, PREFIX_KEY } from './constants.js';
 import type {
   BusOptions,
+  ErrorHandler,
   EventDefinition,
   EventPayload,
   EventRegistry,
@@ -100,20 +101,29 @@ export function createEventBus<TRegistry extends EventRegistry = EventRegistry>(
      * Collects all exceptions (sync and async) and throws as MultiError.
      * Use when you need to ensure all async handlers complete before continuing.
      *
+     * By default, async listeners are executed in parallel (Promise.all) for performance.
+     * Pass { sequential: true } to execute them in registration order (Node strict order).
+     *
      * @typeParam TEvent - EventDefinition type, payload inferred automatically
      * @param event - EventDefinition object created by defineEvent or defineEvents
      * @param payload - Event payload, type strictly checked against EventDefinition
+     * @param options - Execution options: { sequential?: boolean }
      * @returns Promise that resolves when all listeners complete
      * @throws {MultiError} When any listener or middleware throws, containing all collected errors
      *
      * @example
      * await bus.emitAsync(userCreated, { id: "123", name: "Alice" })
-     * // All async listeners awaited, errors aggregated
+     * // All async listeners awaited in parallel, errors aggregated
+     *
+     * @example
+     * // Sequential execution (strict registration order)
+     * await bus.emitAsync(userCreated, { id: "123", name: "Alice" }, { sequential: true })
      */
     emitAsync: async <TEvent extends EventDefinition<string, unknown>>(
       event: TEvent,
-      payload: EventPayload<TEvent>
-    ): Promise<void> => emitAsync(ctx, event, payload),
+      payload: EventPayload<TEvent>,
+      options?: { sequential?: boolean }
+    ): Promise<void> => emitAsync(ctx, event, payload, options),
 
     /**
      * Subscribe to event (supports both sync and async listeners).
@@ -321,6 +331,133 @@ export function createEventBus<TRegistry extends EventRegistry = EventRegistry>(
      */
     get registry(): NormalizedRegistry {
       return ctx.registry;
+    },
+
+    /**
+     * Set or update the error handler for this bus instance.
+     * Overrides the handler provided at creation time.
+     *
+     * @param handler - Function called for each listener exception during emit/emitAsync
+     * @returns Previous error handler (or undefined if none was set)
+     *
+     * @example
+     * const prev = bus.onError((error, event, payload) => {
+     *   logger.error({ event: event.name, error, payload });
+     * });
+     * // Later: restore previous handler
+     * bus.onError(prev);
+     */
+    onError: (handler: ErrorHandler): ErrorHandler | undefined => {
+      const prev = ctx.options.onError;
+      ctx.options.onError = handler;
+      return prev;
+    },
+
+    /**
+     * Get a lightweight debug snapshot of the bus internal state.
+     *
+     * Returns plain counts and option metadata only — it deliberately does
+     * NOT expose raw listener function references. For full listener details
+     * (including the listener functions themselves), use {@link inspect}.
+     *
+     * The returned shape is a **snapshot**: subsequent listener changes are
+     * not reflected until `debug()` is called again.
+     *
+     * @returns A debug info object with:
+     *   - `listenerCounts` — `Record` of event name → listener count
+     *   - `totalListeners` — sum of all listener counts
+     *   - `eventCount` — number of events with at least one registered listener
+     *   - `middlewareCount` — number of registered middlewares
+     *   - `options` — `{ maxListeners, debug }` copy with applied defaults
+     *   - `registryKeys` — namespace keys of the normalized registry
+     *
+     * @example
+     * const info = bus.debug();
+     * console.log(info.listenerCounts); // { 'user.created': 3, 'user.deleted': 1 }
+     * console.log(info.totalListeners); // 4
+     * console.log(info.middlewareCount); // 2
+     * console.log(info.options); // { maxListeners: 10, debug: false }
+     */
+    debug: () => {
+      const listenerCounts: Record<string, number> = {};
+      for (const [eventName, bucket] of ctx.listeners) {
+        listenerCounts[eventName] = bucket.set.size;
+      }
+      return {
+        listenerCounts,
+        totalListeners: Object.values(listenerCounts).reduce((a, b) => a + b, 0),
+        eventCount: ctx.listeners.size,
+        middlewareCount: ctx.middlewares.length,
+        options: {
+          maxListeners: ctx.options.maxListeners,
+          debug: ctx.options.debug,
+        },
+        registryKeys: Object.keys(ctx.registry),
+      };
+    },
+
+    /**
+     * Get a detailed inspection of the bus internal state, including the raw
+     * listener functions themselves.
+     *
+     * This is a debugging aid. **Use with caution in production** — it exposes
+     * live references to every registered listener, which may retain closures
+     * and prevent garbage collection as long as the returned object is held.
+     * Prefer the lighter {@link debug} when only counts are needed.
+     *
+     * The returned shape is a **snapshot**: state captured at call time.
+     *
+     * @returns A detailed inspection object with:
+     *   - `listeners` — one entry per event, each containing:
+     *     - `event` — event name string
+     *     - `listenerCount` — total listeners for this event
+     *     - `onceCount` — how many of those are once-only (`bus.once`)
+     *     - `asyncCount` — how many are async (detected at registration)
+     *     - `listeners` — array of raw listener function references
+     *   - `middlewares` — `{ index, name }[]` describing each registered middleware
+     *   - `options` — copy of the resolved `BusOptions`
+     *   - `registry` — the normalized event registry
+     *
+     * @example
+     * const detail = bus.inspect();
+     * detail.listeners.forEach((entry) => {
+     *   console.log(entry.event, entry.listenerCount, 'once:', entry.onceCount);
+     * });
+     * console.log(detail.middlewares); // [{ index: 0, name: 'loggingMiddleware' }]
+     */
+    inspect: () => {
+      const listeners: Array<{
+        event: string;
+        listenerCount: number;
+        onceCount: number;
+        asyncCount: number;
+        listeners: Listener<unknown>[];
+      }> = [];
+
+      for (const [eventName, bucket] of ctx.listeners) {
+        let onceCount = 0;
+        let asyncCount = 0;
+        const listenerFns: Listener<unknown>[] = [];
+        for (const entry of bucket.set) {
+          if (entry.once) onceCount++;
+          if (entry.isAsync) asyncCount++;
+          listenerFns.push(entry.listener);
+        }
+        listeners.push({
+          event: eventName,
+          listenerCount: bucket.set.size,
+          onceCount,
+          asyncCount,
+          listeners: listenerFns,
+        });
+      }
+
+      return {
+        listeners,
+        middlewares: ctx.middlewares.map((mw, i) => ({ index: i, name: mw.name || 'anonymous' })),
+        options: { ...ctx.options },
+        registry: ctx.registry,
+      };
     },
   };
 

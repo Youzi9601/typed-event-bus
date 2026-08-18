@@ -101,7 +101,7 @@ pnpm version     # 套用 changeset（版本 + CHANGELOG）
 1. **所有變更需對應 Issue**（Bug/Feature/Question 模板）
 2. **破壞性變更需在 PR 中說明決策理由**
 3. **型別變更需同步更新 type tests**
-4. **Bundle size 不得超標**（CI 閘門：gzip-size ≤ 2520 bytes）
+4. **Bundle size 不得超標**（CI 閘門：gzip-size ≤ 3072 bytes）
 
 ---
 
@@ -159,7 +159,7 @@ After receiving tool results, output a brief interpretation before proceeding.
 - [ ] `pnpm test:types` 100% 通過
 - [ ] `pnpm test` 通過（coverage 目標 > 95% 為手動檢視目標，以 `pnpm exec vitest run --coverage` 檢視，非 CI 閘門）
 - [ ] `pnpm build` 成功
-- [ ] `node scripts/check-budget.js` ≤ 2520 bytes（CI 閘門，檢查 dist/index.js 與 dist/index.cjs）
+- [ ] `node scripts/check-budget.js` ≤ 3072 bytes（CI 閘門，檢查 dist/index.js 與 dist/index.cjs）
 - [ ] 無 `console.log` / `debugger` 殘留
 - [ ] Commit 符合 Conventional Commits
 

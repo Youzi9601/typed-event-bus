@@ -62,7 +62,7 @@ describe('emitAsync', () => {
     bus = createEventBus(userCreated);
   });
 
-  it('awaits all async listeners', async () => {
+  it('awaits all async listeners (parallel by default)', async () => {
     const results: number[] = [];
     const asyncListener1 = vi.fn(async () => {
       await new Promise(r => setTimeout(r, 30));
@@ -78,7 +78,31 @@ describe('emitAsync', () => {
 
     await bus.emitAsync(userCreated, { id: '1', name: 'Alice' });
 
-    expect(results).toEqual([1, 2]); // Both completed
+    // Parallel execution: completion order depends on timing, not registration order
+    // Both should complete, order may vary
+    expect(results.sort()).toEqual([1, 2]);
+    expect(asyncListener1).toHaveBeenCalledOnce();
+    expect(asyncListener2).toHaveBeenCalledOnce();
+  });
+
+  it('awaits all async listeners sequentially when { sequential: true }', async () => {
+    const results: number[] = [];
+    const asyncListener1 = vi.fn(async () => {
+      await new Promise(r => setTimeout(r, 30));
+      results.push(1);
+    });
+    const asyncListener2 = vi.fn(async () => {
+      await new Promise(r => setTimeout(r, 20));
+      results.push(2);
+    });
+
+    bus.on(userCreated, asyncListener1);
+    bus.on(userCreated, asyncListener2);
+
+    await bus.emitAsync(userCreated, { id: '1', name: 'Alice' }, { sequential: true });
+
+    // Sequential execution: registration order preserved
+    expect(results).toEqual([1, 2]);
     expect(asyncListener1).toHaveBeenCalledOnce();
     expect(asyncListener2).toHaveBeenCalledOnce();
   });

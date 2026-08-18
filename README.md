@@ -42,7 +42,7 @@ bus.on(userCreated, (payload) => {
 - ✅ **Native IDE support** — Autocomplete, Rename Symbol, Go to Definition
 - ✅ **Wildcard correlation narrowing** — `onAll(namespace, ({ event, payload }) => { ... })` correctly narrows types
 - ✅ **Explicit sync/async separation** — `emit` (fire-and-forget) / `emitAsync` (await all)
-- ✅ **< 2.5 KB gzipped** — zero dependencies, extremely lightweight
+- ✅ **< 3 KB gzipped** — zero dependencies, extremely lightweight
 - ✅ **Transport agnostic** — Browser / Node / Worker / Electron / Deno / Bun / Edge compatible
 
 ---
@@ -128,7 +128,7 @@ sub.unsubscribe()
 | Method | Behavior |
 |--------|----------|
 | `bus.emit(event, payload)` | Sync fire-and-forget, catches exceptions → `onError` → continues |
-| `bus.emitAsync(event, payload)` | Async, awaits all async listeners, aggregates exceptions as `MultiError` |
+| `bus.emitAsync(event, payload, options?)` | Async, awaits all async listeners **in parallel** (Promise.all), aggregates exceptions as `MultiError`. Pass `{ sequential: true }` to execute in registration order (Node strict order) |
 
 ### Subscribe
 

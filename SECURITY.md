@@ -5,7 +5,7 @@
 | Version | Support Status |
 |---------|----------------|
 | 1.x.x (future) | ✅ Will be actively maintained once released |
-| < 1.0.0 (current: 0.1.x) | ⚠️ Pre-release, no security backport guarantees |
+| < 1.0.0 (current: 0.3.x) | ⚠️ Pre-release, no security backport guarantees |
 
 ## Reporting a Vulnerability
 

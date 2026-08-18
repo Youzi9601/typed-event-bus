@@ -179,6 +179,34 @@ describe('error handling', () => {
     expect(onceListener).toHaveBeenCalledTimes(1);
     expect(onError).toHaveBeenCalledOnce();
   });
+
+  it('calls onError when listener returns rejected Promise (regular function)', () => {
+    const onError = vi.fn();
+    const errorBus = createEventBus(userCreated, { onError });
+
+    // Regular (non-async) function that returns a rejected Promise. The async
+    // detection cache marks it non-async, so the isThenable fallback must still
+    // catch the rejection — regression test for the `isAsync ?? isThenable`
+    // short-circuit bug that let this escape as an unhandled rejection
+    // instead of routing to onError.
+    function rejectingListener(): Promise<void> {
+      return Promise.reject(new Error('Rejected promise'));
+    }
+    errorBus.on(userCreated, rejectingListener);
+
+    expect(() => errorBus.emit(userCreated, { id: '1', name: 'Alice' })).not.toThrow();
+
+    // Give the rejection handler a tick to fire
+    return new Promise<void>(resolve => {
+      setTimeout(() => {
+        expect(onError).toHaveBeenCalledOnce();
+        const error = onError.mock.calls[0]?.[0];
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toBe('Rejected promise');
+        resolve();
+      }, 20);
+    });
+  });
 });
 
 describe('MultiError class', () => {

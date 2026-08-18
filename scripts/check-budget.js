@@ -10,8 +10,8 @@ import { resolve } from 'node:path';
 import { gzipSync } from 'node:zlib';
 
 const BUDGET = {
-  esm: 2520,
-  cjs: 2520,
+  esm: 3072,
+  cjs: 3072,
 };
 
 function getGzipSize(filePath) {

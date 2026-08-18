@@ -21,9 +21,9 @@ export function emit<TEvent extends EventDefinition<string, unknown>>(
   payload: EventPayload<TEvent>
 ): boolean {
   const eventName = event.name;
-  const listeners = ctx.listeners.get(eventName);
+  const bucket = ctx.listeners.get(eventName);
 
-  if (!listeners?.size) {
+  if (!bucket?.set.size) {
     if (ctx.options.debug) {
       console.debug(`[typed-event-bus] No listeners for "${eventName}"`);
     }
@@ -32,12 +32,12 @@ export function emit<TEvent extends EventDefinition<string, unknown>>(
 
   if (ctx.middlewares.length > 0) {
     executeMiddleware(ctx.middlewares, event, payload, () =>
-      runListeners(ctx, event, listeners, payload)
+      runListeners(ctx, event, bucket, payload)
     ).catch(error => {
       ctx.options.onError(error, event, payload);
     });
   } else {
-    runListeners(ctx, event, listeners, payload);
+    runListeners(ctx, event, bucket, payload);
   }
 
   return true;

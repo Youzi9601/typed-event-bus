@@ -98,6 +98,37 @@ describe('on', () => {
 
     consoleWarn.mockRestore();
   });
+
+  it('warns on duplicate listener registration when debug is enabled', () => {
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const debugBus = createEventBus(userCreated, { debug: true });
+
+    const handler = vi.fn();
+    debugBus.on(userCreated, handler);
+    debugBus.on(userCreated, handler); // duplicate
+
+    expect(consoleWarn).toHaveBeenCalledWith(
+      expect.stringContaining('Duplicate listener "user.created" (leak)')
+    );
+
+    // Both registrations are kept (Node semantics); the warn is informational.
+    expect(debugBus.listenerCount(userCreated)).toBe(2);
+
+    consoleWarn.mockRestore();
+  });
+
+  it('does not warn on duplicate listener registration when debug is disabled', () => {
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const prodBus = createEventBus(userCreated); // debug: false (default)
+
+    const handler = vi.fn();
+    prodBus.on(userCreated, handler);
+    prodBus.on(userCreated, handler);
+
+    expect(consoleWarn).not.toHaveBeenCalledWith(expect.stringContaining('Duplicate listener'));
+
+    consoleWarn.mockRestore();
+  });
 });
 
 describe('once', () => {

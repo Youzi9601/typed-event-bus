@@ -17,9 +17,22 @@ export type ListenerEntry<TPayload> = {
   once: boolean;
   /** Subscription returned to the caller — marked unsubscribed on auto-removal */
   subscription?: EventSubscription;
+  /** Cached async detection — avoids isThenable check on every emit */
+  isAsync?: boolean;
 };
 
-type ListenerMap = Map<string, Set<ListenerEntry<unknown>>>;
+/**
+ * Per-event listener storage:
+ * - `set`: maintains uniqueness + O(1) add/remove (Node parity)
+ * - `resolved`: snapshot array for fast emit iteration; null = dirty,
+ *   rebuild lazily on next emit. Emptied whenever the set mutates.
+ */
+export type ListenerBucket = {
+  set: Set<ListenerEntry<unknown>>;
+  resolved: ListenerEntry<unknown>[] | null;
+};
+
+type ListenerMap = Map<string, ListenerBucket>;
 
 // Normalized registry type (always Record form after createEventBus normalization)
 export type NormalizedRegistry = Record<
@@ -59,4 +72,9 @@ export function createBusContext(
     },
     registry,
   };
+}
+
+/** Create a fresh empty listener bucket. */
+export function createBucket(): ListenerBucket {
+  return { set: new Set(), resolved: null };
 }

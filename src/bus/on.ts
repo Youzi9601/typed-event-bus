@@ -3,7 +3,45 @@ import { newListenerEvent } from '../constants.js';
 import { createSubscription } from '../subscription.js';
 import type { EventDefinition, EventPayload, Listener, Subscription } from '../types.js';
 import type { BusContext, ListenerEntry } from './context.js';
+import { createBucket } from './context.js';
 import { emitMetaEvent } from './utils.js';
+
+/**
+ * Best-effort check for whether a listener is async.
+ *
+ * This is a performance cache, NOT a correctness guarantee: it lets the
+ * emitter skip an `isThenable` runtime check on the hot path for the common
+ * case. It may return `false` for async-detection heuristics that fail on
+ * cross-realm (Worker/iframe) or minified listeners — that is safe because the
+ * emitter always falls through to `isThenable` at runtime (see runListeners).
+ * If this returns `true` for a sync listener, emitAsync still handles it via
+ * the thenable check. Treat any single check here as advisory.
+ *
+ * @param listener - Listener function
+ * @returns `true` if the listener looks async, `false` otherwise
+ */
+function isAsyncListener(listener: Listener<unknown>): boolean {
+  // Async functions have constructor.name === 'AsyncFunction'
+  // But vitest mock functions wrap async functions, so check multiple ways
+  if (listener.constructor.name === 'AsyncFunction') {
+    return true;
+  }
+  // Check toStringTag (more reliable for cross-realm)
+  if (Object.prototype.toString.call(listener) === '[object AsyncFunction]') {
+    return true;
+  }
+  // Fallback: check if function source contains 'async' (for non-minified code)
+  // This is heuristic and may not work in production builds
+  try {
+    const fnStr = listener.toString();
+    if (fnStr.startsWith('async ') || fnStr.startsWith('async\n') || fnStr.startsWith('async\r')) {
+      return true;
+    }
+  } catch {
+    // ignore
+  }
+  return false;
+}
 
 /**
  * Shared subscription registration for on / once / prependListener /
@@ -29,38 +67,51 @@ export function subscribe(
   prepend = false
 ): Subscription {
   const eventName = event.name;
-  const entry: ListenerEntry<unknown> = { listener, once };
+  const entry: ListenerEntry<unknown> = { listener, once, isAsync: isAsyncListener(listener) };
 
-  let listeners = ctx.listeners.get(eventName);
-  if (!listeners) {
-    listeners = new Set();
-    ctx.listeners.set(eventName, listeners);
+  let bucket = ctx.listeners.get(eventName);
+  if (!bucket) {
+    bucket = createBucket();
+    ctx.listeners.set(eventName, bucket);
   }
 
   emitMetaEvent(ctx, newListenerEvent, listener);
 
   // The newListener meta event may have mutated the listener set (e.g. via
-  // removeAllListeners or another prependListener). Re-fetch the current set
+  // removeAllListeners or another prependListener). Re-fetch the current bucket
   // so the new entry is not added to an orphaned set that is no longer in
   // the map. Mirrors Node, which re-reads `_events` after emitting
   // 'newListener'.
-  listeners = ctx.listeners.get(eventName);
-  if (!listeners) {
-    listeners = new Set();
-    ctx.listeners.set(eventName, listeners);
+  bucket = ctx.listeners.get(eventName);
+  if (!bucket) {
+    bucket = createBucket();
+    ctx.listeners.set(eventName, bucket);
   }
 
-  if (listeners.size >= ctx.options.maxListeners) {
+  if (bucket.set.size >= ctx.options.maxListeners) {
     console.warn(
-      `[typed-event-bus] MaxListenersExceededWarning: ${listeners.size + 1} listeners for "${eventName}". Use bus.options.maxListeners to increase limit.`
+      `[typed-event-bus] MaxListenersExceededWarning: ${bucket.set.size + 1} listeners for "${eventName}". Use bus.options.maxListeners to increase limit.`
     );
   }
 
-  if (prepend) {
-    ctx.listeners.set(eventName, new Set([entry, ...listeners]));
-  } else {
-    listeners.add(entry);
+  // Debug-only duplicate registration guard (Node semantics: duplicates are
+  // separate entries and off() removes the last — a duplicate usually means a
+  // leaked listener retaining its closure). Zero cost when debug is off.
+  if (ctx.options.debug) {
+    const dup = [...bucket.set].some(e => e.listener === listener);
+    if (dup) {
+      console.warn(`[typed-event-bus] Duplicate listener "${eventName}" (leak)`);
+    }
   }
+
+  if (prepend) {
+    bucket.set = new Set([entry, ...bucket.set]);
+  } else {
+    bucket.set.add(entry);
+  }
+
+  // Invalidate resolved cache on mutation
+  bucket.resolved = null;
 
   const sub = createSubscription(bus, eventName, entry.listener, options?.signal);
   entry.subscription = sub;

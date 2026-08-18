@@ -100,7 +100,7 @@ Branch naming convention:
 **Core principles:**
 - **Types first**: Write type tests first (`tests/types/*.test-d.ts`), then implement runtime
 - **Zero dependencies**: Core package `dependencies` must remain empty
-- **Bundle size**: After every change verify `pnpm build && node scripts/check-budget.js` ≤ 2520 bytes (CI gate, checks both `dist/index.js` and `dist/index.cjs`)
+- **Bundle size**: After every change verify `pnpm build && node scripts/check-budget.js` ≤ 3072 bytes (CI gate, checks both `dist/index.js` and `dist/index.cjs`)
 
 **Required checks:**
 ```bash

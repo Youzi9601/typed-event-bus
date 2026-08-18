@@ -21,13 +21,13 @@ export function off(
   listener: Listener<unknown>
 ): boolean {
   const eventName = typeof event === 'string' ? event : event.name;
-  const listeners = ctx.listeners.get(eventName);
+  const bucket = ctx.listeners.get(eventName);
 
-  if (!listeners) return false;
+  if (!bucket) return false;
 
   // Remove the most recently registered instance, matching Node's lastIndexOf.
   let match: ListenerEntry<unknown> | undefined;
-  for (const entry of listeners) {
+  for (const entry of bucket.set) {
     if (entry.listener === listener) {
       match = entry;
     }
@@ -35,13 +35,17 @@ export function off(
 
   if (!match) return false;
 
-  listeners.delete(match);
+  bucket.set.delete(match);
   match.subscription?.markUnsubscribed();
   emitMetaEvent(ctx, removeListenerEvent, listener);
+
+  // Invalidate resolved cache on mutation
+  bucket.resolved = null;
+
   // Only drop the map entry if it is still the same (now empty) set — a
   // removeListener meta listener may have re-registered listeners (e.g. via
   // prependListener, which swaps the set), and those must survive.
-  if (listeners.size === 0 && ctx.listeners.get(eventName) === listeners) {
+  if (bucket.set.size === 0 && ctx.listeners.get(eventName) === bucket) {
     ctx.listeners.delete(eventName);
   }
   return true;

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0
+
+### Minor Changes
+
+- feat: emitAsync now executes async listeners in parallel by default (Promise.all) for performance
+
+  Breaking change: emitAsync previously executed async listeners sequentially (await each). Now it runs them in parallel by default. Pass { sequential: true } to preserve strict Node.js registration order.
+
+- perf: async listener registration cache (+14% sync emit), flat resolved listener cache (+6-23% sync, +125% mixed, +42-50% async), emitAsync parallel by default with { sequential: true } option
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
@@ -42,10 +52,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.2] - 2026-08-13
 
 ### Security
+
 - Fixed 2 critical CVEs in vitest (CVE-2025-24964, CVE-2026-47429) by upgrading vitest 2.1.4 → 4.1.10
 - Fixed 1 high CVE in vite (CVE-2026-53571) and 1 medium CVE (CVE-2026-53632) by upgrading vite 5.4.21 → 8.2.1
 
 ### Changed
+
 - Upgraded TypeScript 5.6.3 → 7.0.2 (removed deprecated `downlevelIteration` option)
 - Upgraded @biomejs/biome 1.9.4 → 2.5.8 (migrated config to v2 schema via `biome migrate`)
 - Upgraded vitest 2.1.4 → 4.1.10
@@ -60,5 +72,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Source code: `Object.prototype.hasOwnProperty.call` → `Object.hasOwn`, import reordering via Biome organizeImports
 
 ### Fixed
+
 - Fixed unsafe optional chaining in tests/runtime/error.test.ts
 - Fixed TypeScript 7.0.0+ compatibility (removed `downlevelIteration`, added `declarationDir`)

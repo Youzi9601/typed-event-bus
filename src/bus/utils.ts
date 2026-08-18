@@ -1,7 +1,17 @@
 import { removeListenerEvent } from '../constants.js';
 import { isThenable } from '../middleware.js';
 import type { EventDefinition, Listener } from '../types.js';
-import type { BusContext, ListenerEntry } from './context.js';
+import type { BusContext, ListenerBucket, ListenerEntry } from './context.js';
+
+/**
+ * Build or retrieve the resolved listener array for fast emit iteration.
+ * Lazily builds on first use; caches until the bucket is mutated (set to null).
+ */
+export function getResolved(bucket: ListenerBucket): ListenerEntry<unknown>[] {
+  if (bucket.resolved) return bucket.resolved;
+  bucket.resolved = [...bucket.set];
+  return bucket.resolved;
+}
 
 /**
  * Invoke all listeners in the set with snapshot semantics (Node EventEmitter):
@@ -11,16 +21,16 @@ import type { BusContext, ListenerEntry } from './context.js';
  *
  * @param ctx BusContext
  * @param event EventDefinition object (used for onError and map cleanup)
- * @param listeners the live listener set
+ * @param bucket the live listener bucket
  * @param payload event payload
  */
 export function runListeners(
   ctx: BusContext,
   event: EventDefinition<string, unknown>,
-  listeners: Set<ListenerEntry<unknown>>,
+  bucket: ListenerBucket,
   payload: unknown
 ): void {
-  const snapshot = [...listeners];
+  const snapshot = getResolved(bucket);
 
   for (const entry of snapshot) {
     if (entry.once) {
@@ -29,8 +39,11 @@ export function runListeners(
       // semantics), and the captured set may be stale if a prependListener
       // swapped the set during this emit.
       entry.subscription?.markUnsubscribed();
-      ctx.listeners.get(event.name)?.delete(entry);
+      bucket.set.delete(entry);
       emitMetaEvent(ctx, removeListenerEvent, entry.listener);
+
+      // Invalidate cache on mutation (once auto-removal)
+      bucket.resolved = null;
     }
 
     let result: unknown;
@@ -41,7 +54,12 @@ export function runListeners(
       continue;
     }
 
-    if (isThenable(result)) {
+    // `entry.isAsync` is a best-effort cache; fall through to `isThenable`
+    // for listeners declared as regular functions that return a Promise.
+    // `isAsync ?? isThenable` would be wrong here: `false ?? x = false`
+    // short-circuits the fallback and lets a rejected Promise escape as an
+    // unhandled rejection. Use `||` so the runtime check always runs.
+    if (entry.isAsync || isThenable(result)) {
       (result as Promise<unknown>).then(
         () => {},
         error => {
@@ -51,10 +69,10 @@ export function runListeners(
     }
   }
 
-  // Only drop the map entry if it is still the same (now empty) set —
+  // Only drop the map entry if it is still the same (now empty) bucket —
   // a listener may have registered new listeners during emission,
   // which must not be removed.
-  if (listeners.size === 0 && ctx.listeners.get(event.name) === listeners) {
+  if (bucket.set.size === 0 && ctx.listeners.get(event.name) === bucket) {
     ctx.listeners.delete(event.name);
   }
 }
@@ -74,9 +92,9 @@ export function emitMetaEvent(
   event: EventDefinition<string, unknown>,
   payload: Listener<unknown>
 ): void {
-  const listeners = ctx.listeners.get(event.name);
-  if (!listeners?.size) return;
-  runListeners(ctx, event, listeners, payload);
+  const bucket = ctx.listeners.get(event.name);
+  if (!bucket?.set.size) return;
+  runListeners(ctx, event, bucket, payload);
 }
 
 /**
@@ -87,8 +105,8 @@ export function emitMetaEvent(
  * @returns number of listeners
  */
 export function listenerCount(ctx: BusContext, event: EventDefinition<string, unknown>): number {
-  const listeners = ctx.listeners.get(event.name);
-  return listeners?.size ?? 0;
+  const bucket = ctx.listeners.get(event.name);
+  return bucket?.set.size ?? 0;
 }
 
 /**
@@ -113,8 +131,8 @@ export function rawListeners(
   ctx: BusContext,
   event: EventDefinition<string, unknown>
 ): Listener<unknown>[] {
-  const listeners = ctx.listeners.get(event.name);
-  return listeners ? Array.from(listeners, entry => entry.listener) : [];
+  const bucket = ctx.listeners.get(event.name);
+  return bucket ? Array.from(bucket.set, entry => entry.listener) : [];
 }
 
 /**
@@ -132,20 +150,23 @@ export function removeAllListeners(
   const names = event ? [event.name] : Array.from(ctx.listeners.keys());
 
   for (const eventName of names) {
-    const listeners = ctx.listeners.get(eventName);
-    if (!listeners) continue;
+    const bucket = ctx.listeners.get(eventName);
+    if (!bucket) continue;
 
-    for (const entry of [...listeners].reverse()) {
+    for (const entry of [...bucket.set].reverse()) {
       // Node semantics: the listener is removed before the meta event fires,
       // so a removed listener never observes its own removal.
       entry.subscription?.markUnsubscribed();
-      listeners.delete(entry);
+      bucket.set.delete(entry);
       emitMetaEvent(ctx, removeListenerEvent, entry.listener);
     }
     // Keep the map entry if the same set received new listeners while the
     // removeListener meta events were firing (re-registration must survive).
-    if (listeners.size === 0 && ctx.listeners.get(eventName) === listeners) {
+    if (bucket.set.size === 0 && ctx.listeners.get(eventName) === bucket) {
       ctx.listeners.delete(eventName);
+    } else {
+      // Invalidate resolved cache on mutation
+      bucket.resolved = null;
     }
   }
 }
