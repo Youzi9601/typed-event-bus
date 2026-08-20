@@ -1,6 +1,6 @@
 {
   "name": "@youzi9601/typed-event-bus",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Define Once, Use Everywhere — Type-safe event bus with zero duplicate declarations",
   "private": false,
   "type": "module",
