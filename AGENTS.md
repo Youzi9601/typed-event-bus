@@ -79,8 +79,18 @@ pnpm check
 ```bash
 pnpm changeset   # 建立 changeset（記錄變更）
 pnpm version     # 套用 changeset（版本 + CHANGELOG）
-# commit + push 後打 tag v*（git tag vX.Y.Z && git push origin vX.Y.Z）
-# GitHub Actions（release.yml）自動執行 pnpm check 並發布 npm（--provenance）
+# commit + push 到 main
+# GitHub Actions 自動觸發：
+#   1. CI (lint + types + tests + build + budget)
+#   2. Version Guard (tag/npm 版本檢查)
+#   3. Release (依 CI 成功 commit，checkout exact SHA → 建 tag → GitHub Release → npm publish)
+```
+
+### 手動 Release（dry-run）
+
+```bash
+# GitHub Actions → workflows → Release → Run workflow → dry_run: true
+# 僅驗證流程，不建 tag、不建 GitHub Release、不 publish
 ```
 
 ---

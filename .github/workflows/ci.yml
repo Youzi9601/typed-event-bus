@@ -2,11 +2,13 @@ name: CI
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-    branches:
-      - main
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -25,8 +27,8 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          cache: 'pnpm'
+          node-version: '22.14'
+          cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -40,14 +42,11 @@ jobs:
       - name: Type tests
         run: pnpm test:types
 
-      - name: Run tests
-        run: pnpm test
-
-      - name: Check coverage
+      - name: Unit tests with coverage
         run: pnpm exec vitest run --coverage
 
       - name: Build
         run: pnpm build
 
-      - name: Verify bundle size
+      - name: Bundle size budget
         run: node scripts/check-budget.js

@@ -202,11 +202,20 @@ pnpm changeset
 # 2. Consume changesets (bump version, generate CHANGELOG)
 pnpm version
 
-# 3. Commit, push, then create a version tag
-git tag v<new-version> && git push origin v<new-version>
+# 3. Commit and push to main
+git push origin main
 ```
 
-Pushing a `v*` tag triggers the Release workflow (`.github/workflows/release.yml`), which runs `pnpm check` and publishes to npm with provenance (`npm publish --provenance`).
+GitHub Actions will automatically:
+1. Run CI (lint + types + tests + build + budget)
+2. Run Version Guard (check tag/npm version conflicts)
+3. Release (on CI success, checkout exact SHA → create tag → GitHub Release → npm publish with provenance)
+
+### Manual Release (dry-run)
+
+Go to GitHub Actions → Release workflow → Run workflow → `dry_run: true`
+
+This validates the pipeline without creating tag, GitHub Release, or publishing to npm.
 
 ## Getting Help
 

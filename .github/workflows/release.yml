@@ -1,23 +1,49 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v*'
+  # 主要觸發：等 CI 在 main 上成功跑完
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+  # 手動觸發（支援 dry-run，只驗證不產生副作用）
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run — only validate, do NOT create tag, GitHub Release, or publish to npm'
+        type: boolean
+        default: false
+
+# 同一時間只允許一個 release job，進行中絕對不中斷
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 permissions:
-  id-token: write
-  contents: read
+  id-token: write       # OIDC provenance for npm publish
+  contents: write       # create tag + GitHub Release
   actions: read
-  attestations: write
 
 jobs:
   release:
+    # workflow_run 觸發時：只在 CI 成功後執行
+    # workflow_dispatch 觸發時：永遠執行
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+
     runs-on: ubuntu-latest
+    environment: production
 
     steps:
-      - name: Checkout
+      # ── Checkout exact commit that CI validated ──────────────────
+      # This is P0 fix: workflow_run SHA is default branch tip, NOT the CI commit.
+      - name: Checkout tested commit
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -25,25 +51,149 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '22.14'
           registry-url: https://registry.npmjs.org/
           scope: '@youzi9601'
 
-      - name: Upgrade npm
-        run: npm install -g npm@latest
+      # ── Read version ─────────────────────────────────────────────
+      - name: Read version
+        id: ver
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          TAG="v${VERSION}"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "tag=${TAG}"         >> $GITHUB_OUTPUT
+          echo "Version: ${VERSION}  Tag: ${TAG}"
+
+      # ── Validate state machine: tag / gh-release / npm ───────────
+      # Each can be in independent state. We check all three.
+
+      - name: Check release state
+        id: state
+        run: |
+          TAG="${{ steps.ver.outputs.tag }}"
+          VERSION="${{ steps.ver.outputs.version }}"
+          PKG=$(node -p "require('./package.json').name")
+
+          # Check tag (local + remote)
+          HAS_TAG=false
+          if git rev-parse --verify "refs/tags/${TAG}" >/dev/null 2>&1; then
+            HAS_TAG=true
+            echo "tag=true" >> $GITHUB_OUTPUT
+          elif git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            HAS_TAG=true
+            echo "tag=true" >> $GITHUB_OUTPUT
+          else
+            echo "tag=false" >> $GITHUB_OUTPUT
+          fi
+
+          # Check GitHub Release (via API)
+          HAS_GH_RELEASE=false
+          if gh release view "${TAG}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            HAS_GH_RELEASE=true
+            echo "gh_release=true" >> $GITHUB_OUTPUT
+          else
+            echo "gh_release=false" >> $GITHUB_OUTPUT
+          fi
+
+          # Check npm (careful: fail if cannot determine)
+          HAS_NPM=false
+          set +e
+          PUBLISHED=$(npm view "${PKG}@${VERSION}" version 2>/dev/null)
+          VIEW_EXIT=$?
+          set -e
+
+          if [ $VIEW_EXIT -ne 0 ]; then
+            echo "::error::npm view failed (exit $VIEW_EXIT). Cannot verify npm status — aborting."
+            exit 1
+          fi
+
+          if [ "$PUBLISHED" = "$VERSION" ]; then
+            HAS_NPM=true
+            echo "npm=true" >> $GITHUB_OUTPUT
+          else
+            echo "npm=false" >> $GITHUB_OUTPUT
+          fi
+
+          echo "State: tag=${HAS_TAG}  gh_release=${HAS_GH_RELEASE}  npm=${HAS_NPM}"
+
+          # Decide if we should proceed with any action
+          if [ "$HAS_TAG" = "true" ] && [ "$HAS_GH_RELEASE" = "true" ] && [ "$HAS_NPM" = "true" ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "ℹ️  All three artifacts exist — version fully released, nothing to do."
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+            echo "🚀 Release actions needed for: ${TAG}"
+          fi
+
+      # ── Configure git identity (only once) ───────────────────────
+      - name: Configure git identity
+        if: steps.state.outputs.skip == 'false'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      # ── Dry-run: only validate, no side effects ──────────────────
+      - name: Dry-run validation
+        if: steps.state.outputs.skip == 'false' && inputs.dry_run
+        run: |
+          echo "🔍 Dry-run mode — running validation only"
+          pnpm install --frozen-lockfile
+          pnpm check
+          echo "===== Package metadata ====="
+          node -p "require('./package.json').name"
+          node -p "require('./package.json').version"
+          npm pack --dry-run
+          echo "✅ Dry-run passed — no tag, no GitHub Release, no npm publish."
+
+      # ── Real release path (skip=false && not dry_run) ────────────
+      # All following steps only run when we actually need to do something
 
       - name: Install dependencies
+        if: steps.state.outputs.skip == 'false' && !inputs.dry_run
         run: pnpm install --frozen-lockfile
 
-      - name: Run full check
+      - name: Run full check suite
+        if: steps.state.outputs.skip == 'false' && !inputs.dry_run
         run: pnpm check
 
-      - name: Verify build output
+      - name: Verify packed output
+        if: steps.state.outputs.skip == 'false' && !inputs.dry_run
         run: |
-          echo "===== package info ====="
+          echo "===== Package metadata ====="
           node -p "require('./package.json').name"
           node -p "require('./package.json').version"
           npm pack --dry-run
 
-      - name: Publish to npm (OIDC/Provenance)
+      # Tag creation (idempotent: only if missing)
+      - name: Create annotated tag
+        if: steps.state.outputs.skip == 'false' && !inputs.dry_run && steps.state.outputs.tag == 'false'
+        run: |
+          TAG="${{ steps.ver.outputs.tag }}"
+          VERSION="${{ steps.ver.outputs.version }}"
+          git tag -a "$TAG" -m "Release ${VERSION}"
+          git push origin "$TAG"
+          echo "✓ Created and pushed tag $TAG"
+
+      # GitHub Release creation (idempotent: only if missing)
+      - name: Create GitHub Release
+        if: steps.state.outputs.skip == 'false' && !inputs.dry_run && steps.state.outputs.gh_release == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          generate_release_notes: true
+
+      # npm Publish (idempotent: only if missing)
+      - name: Publish to npm (OIDC Provenance)
+        if: steps.state.outputs.skip == 'false' && !inputs.dry_run && steps.state.outputs.npm == 'false'
         run: npm publish --access public --provenance --ignore-scripts
+
+      # Summary
+      - name: Release summary
+        if: steps.state.outputs.skip == 'false' && !inputs.dry_run
+        run: |
+          TAG="${{ steps.ver.outputs.tag }}"
+          echo "=== Release completed for ${TAG} ==="
+          [ "${{ steps.state.outputs.tag }}" = "false" ] && echo "✓ Tag created" || echo "⊘ Tag already existed"
+          [ "${{ steps.state.outputs.gh_release }}" = "false" ] && echo "✓ GitHub Release created" || echo "⊘ GitHub Release already existed"
+          [ "${{ steps.state.outputs.npm }}" = "false" ] && echo "✓ Published to npm" || echo "⊘ Already on npm"

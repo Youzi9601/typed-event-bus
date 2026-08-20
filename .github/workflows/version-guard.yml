@@ -1,0 +1,76 @@
+name: Version Guard
+
+on:
+  push:
+    branches: [main]
+    paths: [package.json]
+  pull_request:
+    branches: [main]
+    paths: [package.json]
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read version
+        id: v
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          TAG="v${VERSION}"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "tag=${TAG}"         >> $GITHUB_OUTPUT
+          echo "Detected → version=${VERSION}  tag=${TAG}"
+
+      - name: Tag must not exist locally
+        run: |
+          TAG="${{ steps.v.outputs.tag }}"
+          if git rev-parse --verify "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "::error::Tag $TAG already exists locally — version already released."
+            exit 1
+          fi
+          echo "✓ Tag $TAG does not exist locally."
+
+      # Remote check only on actual push (PR may not have remote tags yet)
+      - name: Tag must not exist on remote
+        if: github.event_name == 'push'
+        run: |
+          TAG="${{ steps.v.outputs.tag }}"
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "::error::Tag $TAG already exists on remote — version already released."
+            exit 1
+          fi
+          echo "✓ Tag $TAG does not exist on remote."
+
+      - name: Version must not be published to npm
+        run: |
+          VERSION="${{ steps.v.outputs.version }}"
+          PKG=$(node -p "require('./package.json').name")
+
+          # npm view exit codes:
+          #   0 = success (version exists or not)
+          #   non-zero = network error, auth error, package not found, etc.
+          set +e
+          PUBLISHED=$(npm view "${PKG}@${VERSION}" version 2>/dev/null)
+          VIEW_EXIT=$?
+          set -e
+
+          if [ $VIEW_EXIT -ne 0 ]; then
+            echo "::error::npm view failed (exit $VIEW_EXIT). Cannot verify publish status — aborting to prevent duplicate publish."
+            exit 1
+          fi
+
+          if [ "$PUBLISHED" = "$VERSION" ]; then
+            echo "::error::${PKG}@${VERSION} is already published to npm — bump the version first."
+            exit 1
+          fi
+
+          echo "✓ ${PKG}@${VERSION} is not yet published."
