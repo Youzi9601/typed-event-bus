@@ -50,7 +50,7 @@ jobs:
           cache: pnpm
 
       - name: Upgrade npm
-        run: npm install -g npm@latest
+        run: npm install -g npm@11.5.1
 
       - name: Verify toolchain versions
         run: |
