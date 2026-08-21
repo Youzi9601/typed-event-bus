@@ -82,8 +82,7 @@ pnpm version     # 套用 changeset（版本 + CHANGELOG）
 # commit + push 到 main
 # GitHub Actions 自動觸發：
 #   1. CI (lint + types + tests + build + budget)
-#   2. Version Guard (tag/npm 版本檢查)
-#   3. Release (依 CI 成功 commit，checkout exact SHA → 建 tag → GitHub Release → npm publish)
+#   2. Release (workflow_run: CI completed → Version Guard + tag + GitHub Release + npm publish)
 ```
 
 ### 手動 Release（dry-run）
@@ -91,6 +90,42 @@ pnpm version     # 套用 changeset（版本 + CHANGELOG）
 ```bash
 # GitHub Actions → workflows → Release → Run workflow → dry_run: true
 # 僅驗證流程，不建 tag、不建 GitHub Release、不 publish
+```
+
+### Release Workflow 內部階段
+
+> Version Guard 已合併進 Release workflow（原獨立 `version-guard.yml` 已刪除）。
+
+```text
+Release workflow (workflow_run: CI completed, branches: [main]):
+  1. Checkout tested commit (github.event.workflow_run.head_sha)
+  2. Setup pnpm + Node 22.14 (cache: pnpm) + upgrade npm to latest
+  3. Verify toolchain (Node >= 22.14.0, npm >= 11.5.1)
+  4. Normalize dry_run flag (workflow_run 時 inputs 不存在 → 統一正規化為 true/false)
+  5. Read version from package.json
+
+  Version Guard (四態矩陣):
+    - tag=absent  npm=absent  → skip=false, 正常 release
+    - tag=present npm=present → skip=true,  已完整發佈，靜默跳過
+    - tag=present npm=absent  → FAIL, 不一致，需人工介入
+    - tag=absent  npm=present → FAIL, 不一致，需人工介入
+
+  Shared (skip=false 時執行，dry-run 和 real release 共用):
+    - pnpm install --frozen-lockfile
+    - pnpm check
+    - npm pack --dry-run (驗證 packed output)
+
+  Dry-run exit (dry_run=true):
+    - 輸出成功訊息，不進行任何發佈動作
+
+  Real release (dry_run=false):
+    - Configure git identity (github-actions[bot])
+    - Assert SHA: HEAD == CI head_sha; existing tag target == CI head_sha
+    - Check GitHub Release state (gh api, stderr "HTTP 404" → false, other error → fail)
+    - Create annotated tag (if missing)
+    - Create GitHub Release via softprops/action-gh-release@v2 (if missing)
+    - npm publish --access public --provenance --ignore-scripts (OIDC Trusted Publishing, if missing)
+    - Release summary
 ```
 
 ---

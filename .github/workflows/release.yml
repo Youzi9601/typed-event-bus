@@ -1,34 +1,29 @@
 name: Release
 
 on:
-  # 主要觸發：等 CI 在 main 上成功跑完
   workflow_run:
     workflows: [CI]
     types: [completed]
     branches: [main]
 
-  # 手動觸發（支援 dry-run，只驗證不產生副作用）
   workflow_dispatch:
     inputs:
       dry_run:
-        description: 'Dry run — only validate, do NOT create tag, GitHub Release, or publish to npm'
+        description: "Dry run — validate only, skip tag / GitHub Release / npm publish"
         type: boolean
         default: false
 
-# 同一時間只允許一個 release job，進行中絕對不中斷
 concurrency:
   group: release
   cancel-in-progress: false
 
 permissions:
-  id-token: write       # OIDC provenance for npm publish
-  contents: write       # create tag + GitHub Release
+  id-token: write
+  contents: write
   actions: read
 
 jobs:
   release:
-    # workflow_run 觸發時：只在 CI 成功後執行
-    # workflow_dispatch 觸發時：永遠執行
     if: >-
       github.event_name == 'workflow_dispatch' ||
       github.event.workflow_run.conclusion == 'success'
@@ -37,12 +32,10 @@ jobs:
     environment: production
 
     steps:
-      # ── Checkout exact commit that CI validated ──────────────────
-      # This is P0 fix: workflow_run SHA is default branch tip, NOT the CI commit.
-      - name: Checkout tested commit
+      - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 0
 
       - name: Setup pnpm
@@ -51,149 +44,231 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '22.14'
+          node-version: "22.14"
           registry-url: https://registry.npmjs.org/
-          scope: '@youzi9601'
+          scope: "@youzi9601"
+          cache: pnpm
 
-      # ── Read version ─────────────────────────────────────────────
+      - name: Upgrade npm
+        run: npm install -g npm@latest
+
+      - name: Verify toolchain versions
+        run: |
+          node --version
+          pnpm --version
+          npm --version
+
+          node -e '
+            const [M, m] = process.versions.node.split(".").map(Number);
+            if (M < 22 || (M === 22 && m < 14)) {
+              console.error("Node " + process.version + " is below required 22.14.0");
+              process.exit(1);
+            }
+            console.log("Node version OK:", process.version);
+          '
+
+          npm --version | awk -F. '
+            ($1 > 11) || ($1 == 11 && $2 > 5) || ($1 == 11 && $2 == 5 && $3 >= 1) { found=1 }
+            END { if (!found) { print "npm below required 11.5.1"; exit 1 } else { print "npm version OK" } }
+          '
+
+      - name: Normalize dry_run flag
+        id: flags
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "dry_run=true" >> "$GITHUB_OUTPUT"
+            echo "Mode: dry-run"
+          else
+            echo "dry_run=false" >> "$GITHUB_OUTPUT"
+            echo "Mode: real release"
+          fi
+
       - name: Read version
         id: ver
         run: |
           VERSION=$(node -p "require('./package.json').version")
           TAG="v${VERSION}"
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
-          echo "tag=${TAG}"         >> $GITHUB_OUTPUT
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}"         >> "$GITHUB_OUTPUT"
           echo "Version: ${VERSION}  Tag: ${TAG}"
 
-      # ── Validate state machine: tag / gh-release / npm ───────────
-      # Each can be in independent state. We check all three.
-
-      - name: Check release state
-        id: state
+      - name: Guard — check tag existence
+        id: guard-tag
         run: |
           TAG="${{ steps.ver.outputs.tag }}"
+
+          if git rev-parse --verify "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "tag_exists=true" >> "$GITHUB_OUTPUT"
+            echo "Tag ${TAG} found locally."
+          elif git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "tag_exists=true" >> "$GITHUB_OUTPUT"
+            echo "Tag ${TAG} found on remote."
+          else
+            echo "tag_exists=false" >> "$GITHUB_OUTPUT"
+            echo "Tag ${TAG} does not exist."
+          fi
+
+      - name: Guard — check npm publish status
+        id: guard-npm
+        run: |
           VERSION="${{ steps.ver.outputs.version }}"
           PKG=$(node -p "require('./package.json').name")
 
-          # Check tag (local + remote)
-          HAS_TAG=false
-          if git rev-parse --verify "refs/tags/${TAG}" >/dev/null 2>&1; then
-            HAS_TAG=true
-            echo "tag=true" >> $GITHUB_OUTPUT
-          elif git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
-            HAS_TAG=true
-            echo "tag=true" >> $GITHUB_OUTPUT
-          else
-            echo "tag=false" >> $GITHUB_OUTPUT
-          fi
-
-          # Check GitHub Release (via API)
-          HAS_GH_RELEASE=false
-          if gh release view "${TAG}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
-            HAS_GH_RELEASE=true
-            echo "gh_release=true" >> $GITHUB_OUTPUT
-          else
-            echo "gh_release=false" >> $GITHUB_OUTPUT
-          fi
-
-          # Check npm (careful: fail if cannot determine)
-          HAS_NPM=false
           set +e
-          PUBLISHED=$(npm view "${PKG}@${VERSION}" version 2>/dev/null)
+          NPM_OUTPUT=$(npm view "${PKG}@${VERSION}" version 2>&1)
           VIEW_EXIT=$?
           set -e
 
-          if [ $VIEW_EXIT -ne 0 ]; then
-            echo "::error::npm view failed (exit $VIEW_EXIT). Cannot verify npm status — aborting."
+          if [ $VIEW_EXIT -eq 0 ]; then
+            echo "npm_published=true" >> "$GITHUB_OUTPUT"
+            echo "${PKG}@${VERSION} is already published."
+          elif echo "$NPM_OUTPUT" | grep -Eq 'npm (ERR!|error) code E404'; then
+            echo "npm_published=false" >> "$GITHUB_OUTPUT"
+            echo "${PKG}@${VERSION} is not yet published."
+          else
+            echo "::error::npm view failed unexpectedly (exit ${VIEW_EXIT}):"
+            echo "$NPM_OUTPUT"
             exit 1
           fi
 
-          if [ "$PUBLISHED" = "$VERSION" ]; then
-            HAS_NPM=true
-            echo "npm=true" >> $GITHUB_OUTPUT
+      - name: Guard — consistency check
+        id: guard
+        run: |
+          TAG_EXISTS="${{ steps.guard-tag.outputs.tag_exists }}"
+          NPM_PUBLISHED="${{ steps.guard-npm.outputs.npm_published }}"
+          VERSION="${{ steps.ver.outputs.version }}"
+          TAG="${{ steps.ver.outputs.tag }}"
+
+          if   [ "$TAG_EXISTS" = "true"  ] && [ "$NPM_PUBLISHED" = "true"  ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Version ${VERSION} already fully released — nothing to do."
+          elif [ "$TAG_EXISTS" = "true"  ] && [ "$NPM_PUBLISHED" = "false" ]; then
+            echo "::error::Inconsistent state: tag ${TAG} exists but ${VERSION} is not on npm."
+            echo "::error::This suggests a failed previous release. Investigate manually."
+            exit 1
+          elif [ "$TAG_EXISTS" = "false" ] && [ "$NPM_PUBLISHED" = "true"  ]; then
+            echo "::error::Inconsistent state: ${VERSION} is on npm but tag ${TAG} does not exist."
+            echo "::error::This suggests a failed previous release. Investigate manually."
+            exit 1
           else
-            echo "npm=false" >> $GITHUB_OUTPUT
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "Version ${VERSION} is not yet released — proceeding."
           fi
 
-          echo "State: tag=${HAS_TAG}  gh_release=${HAS_GH_RELEASE}  npm=${HAS_NPM}"
+      - name: Install dependencies
+        if: steps.guard.outputs.skip == 'false'
+        run: pnpm install --frozen-lockfile
 
-          # Decide if we should proceed with any action
-          if [ "$HAS_TAG" = "true" ] && [ "$HAS_GH_RELEASE" = "true" ] && [ "$HAS_NPM" = "true" ]; then
-            echo "skip=true" >> $GITHUB_OUTPUT
-            echo "ℹ️  All three artifacts exist — version fully released, nothing to do."
-          else
-            echo "skip=false" >> $GITHUB_OUTPUT
-            echo "🚀 Release actions needed for: ${TAG}"
-          fi
+      - name: Run full check suite
+        if: steps.guard.outputs.skip == 'false'
+        run: pnpm check
 
-      # ── Configure git identity (only once) ───────────────────────
+      - name: Verify packed output
+        if: steps.guard.outputs.skip == 'false'
+        run: |
+          echo "===== Package metadata ====="
+          node -p "require('./package.json').name"
+          node -p "require('./package.json').version"
+          echo "===== Dry-pack contents ====="
+          npm pack --dry-run
+
+      - name: Dry-run complete
+        if: steps.guard.outputs.skip == 'false' && steps.flags.outputs.dry_run == 'true'
+        run: |
+          echo "Dry-run passed — install, check, and pack all succeeded."
+          echo "No tag, GitHub Release, or npm publish was performed."
+
       - name: Configure git identity
-        if: steps.state.outputs.skip == 'false'
+        if: steps.guard.outputs.skip == 'false' && steps.flags.outputs.dry_run == 'false'
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      # ── Dry-run: only validate, no side effects ──────────────────
-      - name: Dry-run validation
-        if: steps.state.outputs.skip == 'false' && inputs.dry_run
+      - name: Assert release SHA matches CI-tested commit
+        if: steps.guard.outputs.skip == 'false' && steps.flags.outputs.dry_run == 'false'
         run: |
-          echo "🔍 Dry-run mode — running validation only"
-          pnpm install --frozen-lockfile
-          pnpm check
-          echo "===== Package metadata ====="
-          node -p "require('./package.json').name"
-          node -p "require('./package.json').version"
-          npm pack --dry-run
-          echo "✅ Dry-run passed — no tag, no GitHub Release, no npm publish."
+          EXPECTED_SHA="${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}"
+          CURRENT_SHA="$(git rev-parse HEAD)"
 
-      # ── Real release path (skip=false && not dry_run) ────────────
-      # All following steps only run when we actually need to do something
+          if [ "$CURRENT_SHA" != "$EXPECTED_SHA" ]; then
+            echo "::error::SHA mismatch — HEAD is ${CURRENT_SHA}, expected CI-tested ${EXPECTED_SHA}"
+            exit 1
+          fi
 
-      - name: Install dependencies
-        if: steps.state.outputs.skip == 'false' && !inputs.dry_run
-        run: pnpm install --frozen-lockfile
+          TAG="${{ steps.ver.outputs.tag }}"
+          if git rev-parse --verify "refs/tags/${TAG}" >/dev/null 2>&1; then
+            TAG_SHA="$(git rev-parse "refs/tags/${TAG}^{}")"
+            if [ "$TAG_SHA" != "$EXPECTED_SHA" ]; then
+              echo "::error::Tag ${TAG} points to ${TAG_SHA}, expected ${EXPECTED_SHA}"
+              exit 1
+            fi
+            echo "Existing tag ${TAG} correctly points to ${TAG_SHA}."
+          fi
 
-      - name: Run full check suite
-        if: steps.state.outputs.skip == 'false' && !inputs.dry_run
-        run: pnpm check
+          echo "SHA verified: ${EXPECTED_SHA}"
 
-      - name: Verify packed output
-        if: steps.state.outputs.skip == 'false' && !inputs.dry_run
+      - name: Check GitHub Release state
+        id: gh-state
+        if: steps.guard.outputs.skip == 'false' && steps.flags.outputs.dry_run == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          echo "===== Package metadata ====="
-          node -p "require('./package.json').name"
-          node -p "require('./package.json').version"
-          npm pack --dry-run
+          TAG="${{ steps.ver.outputs.tag }}"
 
-      # Tag creation (idempotent: only if missing)
+          set +e
+          GH_ERROR=$(gh api "repos/${{ github.repository }}/releases/tags/${TAG}" 2>&1 >/dev/null)
+          GH_EXIT=$?
+          set -e
+
+          if [ $GH_EXIT -eq 0 ]; then
+            echo "gh_release=true" >> "$GITHUB_OUTPUT"
+            echo "GitHub Release for ${TAG} already exists."
+          elif echo "$GH_ERROR" | grep -q "HTTP 404"; then
+            echo "gh_release=false" >> "$GITHUB_OUTPUT"
+            echo "GitHub Release for ${TAG} does not exist."
+          else
+            echo "::error::Unexpected error querying GitHub Release (exit ${GH_EXIT}):"
+            echo "$GH_ERROR"
+            exit 1
+          fi
+
       - name: Create annotated tag
-        if: steps.state.outputs.skip == 'false' && !inputs.dry_run && steps.state.outputs.tag == 'false'
+        if: >-
+          steps.guard.outputs.skip == 'false' &&
+          steps.flags.outputs.dry_run == 'false' &&
+          steps.guard-tag.outputs.tag_exists == 'false'
         run: |
           TAG="${{ steps.ver.outputs.tag }}"
           VERSION="${{ steps.ver.outputs.version }}"
           git tag -a "$TAG" -m "Release ${VERSION}"
           git push origin "$TAG"
-          echo "✓ Created and pushed tag $TAG"
+          echo "Created and pushed tag ${TAG}"
 
-      # GitHub Release creation (idempotent: only if missing)
       - name: Create GitHub Release
-        if: steps.state.outputs.skip == 'false' && !inputs.dry_run && steps.state.outputs.gh_release == 'false'
+        if: >-
+          steps.guard.outputs.skip == 'false' &&
+          steps.flags.outputs.dry_run == 'false' &&
+          steps.gh-state.outputs.gh_release == 'false'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.ver.outputs.tag }}
           generate_release_notes: true
 
-      # npm Publish (idempotent: only if missing)
       - name: Publish to npm (OIDC Provenance)
-        if: steps.state.outputs.skip == 'false' && !inputs.dry_run && steps.state.outputs.npm == 'false'
+        if: >-
+          steps.guard.outputs.skip == 'false' &&
+          steps.flags.outputs.dry_run == 'false' &&
+          steps.guard-npm.outputs.npm_published == 'false'
         run: npm publish --access public --provenance --ignore-scripts
 
-      # Summary
       - name: Release summary
-        if: steps.state.outputs.skip == 'false' && !inputs.dry_run
+        if: steps.guard.outputs.skip == 'false' && steps.flags.outputs.dry_run == 'false'
         run: |
           TAG="${{ steps.ver.outputs.tag }}"
-          echo "=== Release completed for ${TAG} ==="
-          [ "${{ steps.state.outputs.tag }}" = "false" ] && echo "✓ Tag created" || echo "⊘ Tag already existed"
-          [ "${{ steps.state.outputs.gh_release }}" = "false" ] && echo "✓ GitHub Release created" || echo "⊘ GitHub Release already existed"
-          [ "${{ steps.state.outputs.npm }}" = "false" ] && echo "✓ Published to npm" || echo "⊘ Already on npm"
+          echo "=== Release completed: ${TAG} ==="
+          [ "${{ steps.guard-tag.outputs.tag_exists }}"    = "false" ] \
+            && echo "Tag:            created"           || echo "Tag:            already existed"
+          [ "${{ steps.gh-state.outputs.gh_release }}"     = "false" ] \
+            && echo "GitHub Release: created"           || echo "GitHub Release: already existed"
+          [ "${{ steps.guard-npm.outputs.npm_published }}"  = "false" ] \
+            && echo "npm:            published"          || echo "npm:            already existed"
