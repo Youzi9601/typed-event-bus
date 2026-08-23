@@ -1,0 +1,45 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": ["src/index.ts"],
+  "entryPointStrategy": "expand",
+  "out": "wiki-output",
+  "plugin": ["typedoc-plugin-markdown"],
+  "theme": "markdown",
+  "excludeInternal": true,
+  "excludePrivate": true,
+  "excludeProtected": false,
+  "excludeExternals": true,
+  "readme": "none",
+  "categorizeByGroup": true,
+  "categoryOrder": [
+    "Core",
+    "Event Definition",
+    "Event Bus",
+    "Subscription",
+    "Middleware",
+    "Error Handling",
+    "Types",
+    "Utilities",
+    "Meta Events"
+  ],
+  "defaultCategory": "Core",
+  "groupOrder": [
+    "Functions",
+    "Classes",
+    "Interfaces",
+    "Types",
+    "Enums",
+    "Variables"
+  ],
+  "sort": ["kind", "alphabetical"],
+  "navigation": {
+    "includeCategories": true,
+    "includeGroups": true
+  },
+  "treatWarningsAsErrors": false,
+  "validation": {
+    "notExported": true,
+    "invalidLink": true,
+    "notDocumented": false
+  }
+}

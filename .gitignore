@@ -43,6 +43,9 @@ bench-results.json
 !.changeset/config.json
 !.changeset/*.md
 
+# Wiki (separate git repo)
+wiki/
+
 # 
 core
 plan.md
