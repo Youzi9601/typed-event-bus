@@ -2,8 +2,8 @@
   "$schema": "https://typedoc.org/schema.json",
   "entryPoints": ["src/index.ts"],
   "entryPointStrategy": "expand",
-  "out": "wiki-output",
-  "plugin": ["typedoc-plugin-markdown"],
+  "out": "wiki",
+  "plugin": ["typedoc-plugin-markdown", "typedoc-github-wiki-theme"],
   "theme": "markdown",
   "excludeInternal": true,
   "excludePrivate": true,
@@ -41,5 +41,9 @@
     "notExported": true,
     "invalidLink": true,
     "notDocumented": false
+  },
+  "sidebar": {
+    "autoConfiguration": true,
+    "heading": "API Reference"
   }
 }

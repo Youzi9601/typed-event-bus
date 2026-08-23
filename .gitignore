@@ -27,6 +27,11 @@ coverage/
 # Type checking cache
 .tsbuildinfo
 
+# Build type declaration outputs
+*.d.ts
+*.d.ts.map
+!src/**/*.d.ts
+
 # Benchmark results
 bench-results.json
 

@@ -21,7 +21,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsup && tsc --emitDeclarationOnly --declaration --declarationMap --rootDir src --outDir dist src/index.ts --ignoreConfig",
+    "build": "tsup && tsc -p tsconfig.build.json",
     "build:watch": "tsup --watch",
     "dev": "tsup --watch",
     "test": "vitest run",
