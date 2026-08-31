@@ -31,10 +31,10 @@ importers:
         version: 0.28.20(typescript@5.5.3)
       typedoc-github-wiki-theme:
         specifier: ^2.1.0
-        version: 2.1.0(typedoc-plugin-markdown@4.12.0(typedoc@0.28.20(typescript@5.5.3)))
+        version: 2.1.0(typedoc-plugin-markdown@4.13.0(typedoc@0.28.20(typescript@5.5.3)))
       typedoc-plugin-markdown:
         specifier: ^4.12.0
-        version: 4.12.0(typedoc@0.28.20(typescript@5.5.3))
+        version: 4.13.0(typedoc@0.28.20(typescript@5.5.3))
       typescript:
         specifier: 5.5.3
         version: 5.5.3
@@ -1284,8 +1284,8 @@ packages:
     peerDependencies:
       typedoc-plugin-markdown: '>=4.3.0'
 
-  typedoc-plugin-markdown@4.12.0:
-    resolution: {integrity: sha512-eJDEMAfxCmede22c/Jw7d0FA13ggAQv+KkwQYKYCdqI02cin6Rc9QRwbG/7XvvHWinuFejySnZVUWDtvGk3Vbg==}
+  typedoc-plugin-markdown@4.13.0:
+    resolution: {integrity: sha512-OHaOLoMTS0wL2ud73WXvxv486mrUEtgXxW4iKiTOGJVipT/VBWY76rlVRMQGes7aVonoIf5roWRe1UvHbufLlQ==}
     engines: {node: '>= 18'}
     peerDependencies:
       typedoc: 0.28.x
@@ -2443,11 +2443,11 @@ snapshots:
       - tsx
       - yaml
 
-  typedoc-github-wiki-theme@2.1.0(typedoc-plugin-markdown@4.12.0(typedoc@0.28.20(typescript@5.5.3))):
+  typedoc-github-wiki-theme@2.1.0(typedoc-plugin-markdown@4.13.0(typedoc@0.28.20(typescript@5.5.3))):
     dependencies:
-      typedoc-plugin-markdown: 4.12.0(typedoc@0.28.20(typescript@5.5.3))
+      typedoc-plugin-markdown: 4.13.0(typedoc@0.28.20(typescript@5.5.3))
 
-  typedoc-plugin-markdown@4.12.0(typedoc@0.28.20(typescript@5.5.3)):
+  typedoc-plugin-markdown@4.13.0(typedoc@0.28.20(typescript@5.5.3)):
     dependencies:
       typedoc: 0.28.20(typescript@5.5.3)
 
