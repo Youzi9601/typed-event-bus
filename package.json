@@ -69,9 +69,9 @@
     "typescript": ">=5.0.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.9",
-    "@changesets/cli": "3.0.1",
-    "@types/node": "26.2.0",
+    "@biomejs/biome": "2.5.12",
+    "@changesets/cli": "3.0.2",
+    "@types/node": "26.4.1",
     "@vitest/coverage-v8": "^4.1.11",
     "esbuild": "^0.28.2",
     "tsup": "8.5.1",
